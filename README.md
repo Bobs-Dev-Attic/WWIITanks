@@ -13,6 +13,17 @@ zoom, and pan around the action.
 > shell ballistics, and explosions. See [Roadmap](#roadmap) for what a fuller
 > version would add.
 
+## Two builds in this repo
+
+| Build | Where | Runs on Vercel? |
+| --- | --- | --- |
+| **Web build (Three.js)** | [`web/`](web/) | ✅ Yes — pure static files, no build step. This is what deploys to Vercel and what you can play instantly in a browser. |
+| **Defold source** | `game.project`, `main/`, `scripts/`, … | ⚠️ Not directly — Vercel can't run the Defold engine. Build it in the Defold editor (`Project → Bundle → HTML5`) and deploy that bundle separately. |
+
+The web build is a faithful port of the Defold MVP (same tanks, camera,
+controls, combat) written so it can actually be hosted and verified end-to-end.
+The Defold project remains the canonical engine implementation described below.
+
 ---
 
 ## Controls
