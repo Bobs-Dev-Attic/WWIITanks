@@ -24,6 +24,11 @@ The web build is a faithful port of the Defold MVP (same tanks, camera,
 controls, combat) written so it can actually be hosted and verified end-to-end.
 The Defold project remains the canonical engine implementation described below.
 
+The web build opens on a **setup screen** (tabbed): a **Battlefield** tab to
+choose location + weather (with the version number), and **Allies**/**Axis**
+tabs to pick tank types and **place them on a minimap** in your deployment zone.
+In battle, press **Tab** to take command of any friendly tank.
+
 The web build has since grown well beyond the MVP with these battlefield systems:
 
 - **Allied tanks** fight the German company alongside the player; a generic
@@ -38,8 +43,15 @@ The web build has since grown well beyond the MVP with these battlefield systems
   Machine-gun fire mostly pings off armour; AP shells and grenades do the work.
 - **Reload indicators** — a HUD reload bar/timer plus a floating reload bar over
   every tank while its gun is cooling down.
-- **Bailing crews** — when a tank is disabled the tankers **climb out and flee**,
-  firing rifles and **lobbing grenades** as they run.
+- **Bailing crews** — when a tank is disabled the tankers **climb out**, run for
+  the nearest **cover**, go **prone**, and fight with **rifles / pistols /
+  grenades** (minimal damage to armour, but they duel enemy infantry too).
+- **Rich terrain** — buildings, ruins, trees, rocks, **rivers with bridges** you
+  must cross, **barbed wire** (blocks/hurts infantry), and **anti-tank
+  hedgehogs**. Location + weather change the ground, props, fog, and light.
+- **Tank types & rosters** — Light/Medium/Heavy per faction (Stuart/Sherman/
+  Pershing vs Panzer II/Panzer IV/Tiger), each with distinct armour, speed, and
+  gun, deployed from the setup minimaps.
 
 ---
 
