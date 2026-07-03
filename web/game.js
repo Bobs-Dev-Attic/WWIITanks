@@ -13,7 +13,7 @@
 
 import * as THREE from "three";
 
-export const VERSION = "0.7.0";
+export const VERSION = "0.8.0";
 
 // Half-extent of the playable battlefield (world units). Shared with the setup
 // minimaps so deployment coordinates line up with the in-game bounds.
@@ -564,9 +564,13 @@ export function startGame(config) {
     const hpBg = makeBar(0x111111, 0, 2.2), hpFill = makeBar(0x7ac74f, 0, 2.2);
     const rlBg = makeBar(0x111111, -0.32, 2.2), rlFill = makeBar(0xffd24a, -0.32, 2.2);
     bars.add(hpBg, hpFill, rlBg, rlFill); built.group.add(bars);
+    // WWII role/doctrine by class: fast lights scout & flank, heavies support by
+    // fire from standoff, everything else forms the manoeuvring line.
+    const role = spec.maxFwd >= 14 ? "scout" : (spec.health >= 170 ? "support" : "line");
     const t = { team, typeKey, name: spec.name, group: built.group, turret: built.turret, parts: built.parts,
       yaw: yaw || 0, turretYaw: 0, speed: 0, health: spec.health, maxHealth: spec.health, radius: 1.8,
       cooldown: 0, reload: spec.reload, maxFwd: spec.maxFwd, dmg: spec.dmg, big: spec.big, mgCd: 0, smokeCd: 0,
+      role, bound: tanks.length % 2, smoked: false,
       leftTrackBroken: false, rightTrackBroken: false, turretGone: false, alive: true, disabled: false,
       crewCount: spec.big ? 4 : 3, hasGrenades: Math.random() < 0.6, bars, hpFill, rlFill, rlBg };
     tanks.push(t); return t;
@@ -773,9 +777,14 @@ export function startGame(config) {
       const s = projectiles[i]; s.life -= dt;
       s.mesh.position.addScaledVector(s.dir, s.spec.speed * dt);
       const p = s.mesh.position; let done = false;
-      for (const o of obstacles) { if (o.destroyed || o.radius <= 0 || s.hitObs.has(o) || o.type === "wire") continue;
-        if (Math.hypot(p.x - o.pos.x, p.z - o.pos.z) < o.radius && p.y < 5) { s.hitObs.add(o); damageObstacle(o, s.spec.obsDmg, p.clone()); } }
-      for (const t of tanks) { if (!t.alive || t === s.owner) continue; if (!s.ff && t.team === s.team) continue;
+      for (const o of obstacles) {
+        if (o.destroyed || o.radius <= 0 || o.type === "wire") continue;
+        if (Math.hypot(p.x - o.pos.x, p.z - o.pos.z) < o.radius && p.y < 5) {
+          if (hardCover(o)) { damageObstacle(o, s.spec.obsDmg, p.clone()); done = true; break; } // masonry/rock stops the round → real cover
+          else if (!s.hitObs.has(o)) { s.hitObs.add(o); damageObstacle(o, s.spec.obsDmg, p.clone()); } // foliage/wire: punch through
+        }
+      }
+      if (!done) for (const t of tanks) { if (!t.alive || t === s.owner) continue; if (!s.ff && t.team === s.team) continue;
         if (p.distanceTo(t.group.position.clone().setY(1)) < t.radius + 0.5) { hitTank(t, s, p.clone()); explode(p.clone(), s.spec.big); done = true; break; } }
       if (!done) for (const c of crews) { if (!c.alive) continue; if (!s.ff && c.team === s.team) continue;
         if (p.distanceTo(c.group.position.clone().setY(0.9)) < 0.7) { hurtCrew(c, s.spec.crewDmg); if (s.spec.big) explode(p.clone()); done = true; break; } }
@@ -818,6 +827,15 @@ export function startGame(config) {
     const local = t.group.worldToLocal(hitPos.clone());
     const side = Math.abs(local.x) > 0.7, high = local.y > 0.85;
     const heavy = proj.type === "ap" || proj.type === "he";
+    // armour facing: thick sloped glacis up front bounces shots; sides & rear are weak
+    let facing = 1;
+    if (heavy) {
+      if (local.z > 0.5 && local.z > Math.abs(local.x)) facing = 0.55;      // frontal
+      else if (local.z < -0.4) facing = 1.5;                                // rear
+      else facing = 1.2;                                                    // side
+      dmg *= facing;
+      if (facing < 0.6 && Math.random() < 0.4) { spawnChips(hitPos.clone(), 0xffe08a, 5, 5); dmg *= 0.4; } // ricochet off the glacis
+    }
     if (proj.type === "mg") { dmg *= 0.5; spawnChips(hitPos.clone(), 0xffe08a, 3, 3); }
     t.health -= dmg;
     if (heavy && side && local.y < 0.75 && !(local.x < 0 ? t.leftTrackBroken : t.rightTrackBroken) && Math.random() < 0.7) {
@@ -994,27 +1012,109 @@ export function startGame(config) {
     return Math.atan2(dir.x, dir.z);
   }
 
-  function updateAITank(t, dt) {
-    if (!t.alive) return; if (t.cooldown > 0) t.cooldown -= dt; if (t.mgCd > 0) t.mgCd -= dt;
-    const { target, dist } = nearestEnemyEntity(t.group.position, t.team, 220);
-    if (!target) { driveTank(t, 0, 0, dt); return; }
-    const dx = target.group.position.x - t.group.position.x, dz = target.group.position.z - t.group.position.z;
-    const aimYaw = Math.atan2(dx, dz);                     // turret tracks the target directly
-    const navYaw = navHeading(t, target.group.position);  // hull follows the navigated route
-    const step = shortAngle(t.yaw, navYaw), steer = clamp(-step * 2, -1, 1);
-    let throttle = 1;
-    if (dist < 20) throttle = -1;
-    else if (dist < 32 && Math.abs(step) < deg(35)) throttle = 0.35; // ease off in range, but keep maneuvering
-    driveTank(t, throttle, steer, dt);
-    if (!t.turretGone) { const rel = aimYaw - t.yaw, s = shortAngle(t.turretYaw, rel);
-      t.turretYaw += clamp(s, -deg(140) * dt, deg(140) * dt); t.turret.rotation.y = t.turretYaw;
-      const aligned = Math.abs(shortAngle(t.yaw + t.turretYaw, aimYaw)) < deg(8);
-      const clear = !smokeBlocks(t.group.position, target.group.position); // smoke screens block LOS
-      if (t.cooldown <= 0 && dist < 85 && aligned && clear) fireTank(t);
-      // rake nearby enemy infantry with the machine gun
-      const foot = nearestEnemyEntity(t.group.position, t.team, 42, true).target;
-      if (foot && t.mgCd <= 0 && !smokeBlocks(t.group.position, foot.group.position)) fireMG(t, foot.group.position.clone().setY(1), false);
+  // ---- tactical helpers ---------------------------------------------------
+  const hardCover = (o) => (o.type === "building" || o.type === "ruin" || o.type === "rock") && o.solid && !o.destroyed;
+  function terrainBlocks(a, b) { // hard cover on the line of sight
+    for (const o of obstacles) {
+      if (!hardCover(o) || o.radius <= 0) continue;
+      const abx = b.x - a.x, abz = b.z - a.z, len2 = abx * abx + abz * abz;
+      let u = len2 > 0 ? ((o.pos.x - a.x) * abx + (o.pos.z - a.z) * abz) / len2 : 0; u = Math.max(0.05, Math.min(0.95, u));
+      const dx = a.x + abx * u - o.pos.x, dz = a.z + abz * u - o.pos.z;
+      if (dx * dx + dz * dz < o.radius * o.radius) return true;
     }
+    return false;
+  }
+  function nearestHardCover(pos, maxD) {
+    let best = null, bd = maxD;
+    for (const o of obstacles) { if (!hardCover(o) || o.radius <= 0) continue; const d = o.pos.distanceTo(pos); if (d < bd) { bd = d; best = o; } }
+    return best;
+  }
+  function coverPoint(o, fromPos, extra) { // a spot on the far side of cover from a threat
+    const d = new THREE.Vector3(o.pos.x - fromPos.x, 0, o.pos.z - fromPos.z);
+    if (d.lengthSq() < 0.01) d.set(1, 0, 0); d.normalize();
+    return new THREE.Vector3(o.pos.x + d.x * (o.radius + extra), 0, o.pos.z + d.z * (o.radius + extra));
+  }
+  function flankPoint(t, target) { // reach the enemy's side/rear, not its glacis
+    const f = new THREE.Vector3(Math.sin(target.yaw), 0, Math.cos(target.yaw));
+    const perp = new THREE.Vector3(f.z, 0, -f.x);
+    const rel = new THREE.Vector3(t.group.position.x - target.group.position.x, 0, t.group.position.z - target.group.position.z);
+    const s = (rel.x * perp.x + rel.z * perp.z) >= 0 ? 1 : -1;
+    return new THREE.Vector3(target.group.position.x - f.x * 6 + perp.x * s * 24, 0, target.group.position.z - f.z * 6 + perp.z * s * 24);
+  }
+  function nearestEnemyTank(t) {
+    let best = null, bd = 260;
+    for (const e of tanks) { if (!e.alive || e.disabled || e.team === t.team) continue; const d = e.group.position.distanceTo(t.group.position); if (d < bd) { bd = d; best = e; } }
+    return { target: best, dist: bd };
+  }
+  function countNear(pos, team, r, same) {
+    let n = 0; for (const e of tanks) { if (!e.alive || e.disabled) continue; if (same ? e.team !== team : e.team === team) continue; if (e.group.position.distanceTo(pos) < r) n++; }
+    return n;
+  }
+
+  // ---- role-based WWII armour AI -----------------------------------------
+  function updateAITank(t, dt) {
+    if (!t.alive) return;
+    if (t.cooldown > 0) t.cooldown -= dt; if (t.mgCd > 0) t.mgCd -= dt; if (t.smokeCd > 0) t.smokeCd -= dt;
+    const pos = t.group.position;
+    const { target: enemyTank, dist: tankDist } = nearestEnemyTank(t);
+    const foot = nearestEnemyEntity(pos, t.team, 42, true).target;
+    const target = enemyTank || nearestEnemyEntity(pos, t.team, 220).target;
+    if (!target) { driveTank(t, 0, 0, dt); return; }
+    const tp = target.group.position;
+    const dist = Math.hypot(tp.x - pos.x, tp.z - pos.z);
+    const aimYaw = Math.atan2(tp.x - pos.x, tp.z - pos.z);
+    const hf = t.health / t.maxHealth;
+    const reloading = t.cooldown > t.reload * 0.35;
+
+    let faceYaw = aimYaw, throttle = 0, fireRange = 80;
+
+    if (hf < 0.32) {
+      // WITHDRAW: reverse in good order, facing the enemy, under smoke
+      if (!t.smoked && t.smokeCd <= 0 && dist < 55) { deploySmoke(t); t.smoked = true; }
+      faceYaw = aimYaw; throttle = -1;
+    } else if (t.role === "scout") {
+      // FLANK: swing wide to the enemy's side/rear, avoid frontal duels with heavies
+      fireRange = 60;
+      const fg = flankPoint(t, target);
+      const dg = Math.hypot(fg.x - pos.x, fg.z - pos.z);
+      if (dist < 16 && target.big) { faceYaw = navHeading(t, fg); throttle = 1; }        // don't sit in front of a heavy
+      else if (dg > 10) { faceYaw = navHeading(t, fg); throttle = 1; }                    // race to the flank
+      else { faceYaw = aimYaw; throttle = dist < 22 ? -0.5 : 0.1; }                       // engage from the side
+    } else if (t.role === "support") {
+      // SUPPORT BY FIRE: stand off, keep the glacis to the enemy, use cover
+      fireRange = 95;
+      if (dist < 30) { faceYaw = aimYaw; throttle = -1; }                                 // open the range
+      else if (dist > 72) { faceYaw = navHeading(t, tp); throttle = 0.6; }
+      else {
+        const cov = nearestHardCover(pos, 16);
+        if (reloading && cov) { faceYaw = navHeading(t, coverPoint(cov, tp, 3)); throttle = 0.6; } // tuck behind cover to reload
+        else { faceYaw = aimYaw; throttle = 0; }
+      }
+    } else {
+      // LINE: bounding overwatch + hull-down + mutual support
+      const moving = (Math.floor(_t0 / 4) % 2) === t.bound;
+      const friends = countNear(pos, t.team, 46, true), foes = countNear(pos, t.team, 40, false);
+      const alone = friends === 0 && foes >= 1 && dist < 42; // don't charge in alone
+      const cov = nearestHardCover(pos, 15);
+      if (reloading && cov) { faceYaw = navHeading(t, coverPoint(cov, tp, 2.5)); throttle = 0.7; } // shoot-and-scoot behind cover
+      else if (dist > 50 && moving && !alone) { faceYaw = navHeading(t, tp); throttle = 1; }       // bound forward
+      else if (dist < 22) { faceYaw = aimYaw; throttle = -0.7; }                                     // back off if crowded
+      else { faceYaw = aimYaw; throttle = 0; }                                                       // overwatch: hold & fire
+    }
+
+    const step = shortAngle(t.yaw, faceYaw), steer = clamp(-step * 2.2, -1, 1);
+    driveTank(t, throttle, steer, dt);
+
+    if (!t.turretGone) {
+      const rel = aimYaw - t.yaw, s = shortAngle(t.turretYaw, rel);
+      t.turretYaw += clamp(s, -deg(140) * dt, deg(140) * dt); t.turret.rotation.y = t.turretYaw;
+      const aligned = Math.abs(shortAngle(t.yaw + t.turretYaw, aimYaw)) < deg(7);
+      const clearLOS = !smokeBlocks(pos, tp) && !terrainBlocks(pos, tp);
+      if (enemyTank && t.cooldown <= 0 && dist < fireRange && aligned && clearLOS) fireTank(t);
+      if (foot && t.mgCd <= 0 && !smokeBlocks(pos, foot.group.position) && !terrainBlocks(pos, foot.group.position))
+        fireMG(t, foot.group.position.clone().setY(1), false);
+    }
+    if (hf >= 0.32) t.smoked = false; // reset once healthy again
   }
 
   // ===========================================================================
@@ -1104,6 +1204,11 @@ export function startGame(config) {
     smokeBlocksAt(ax, az, bx, bz) { return smokeBlocks({ x: ax, z: az }, { x: bx, z: bz }); },
     get keyF() { return !!keys["f"]; }, mgFireNow() { if (controlled) fireMG(controlled, aimPoint.clone().setY(1), true); },
     smokeNow() { if (controlled) deploySmoke(controlled); },
+    terrainBlocksAt(ax, az, bx, bz) { return terrainBlocks({ x: ax, z: az }, { x: bx, z: bz }); },
+    testFacing(idx, where) { const tk = tanks[idx]; if (!tk) return null; const before = tk.health;
+      const off = where === "front" ? new THREE.Vector3(0, 0.4, 1.3) : where === "rear" ? new THREE.Vector3(0, 0.4, -1.3) : new THREE.Vector3(1.3, 0.4, 0);
+      const wp = tk.group.localToWorld(off.clone());
+      hitTank(tk, { type: "ap", spec: PROJ.ap, dmg: 50 }, wp, 50); return Math.round((before - tk.health) * 10) / 10; },
     testShell(x, z, ff) { if (!controlled) return; const pos = controlled.group.position;
       const dir = new THREE.Vector3(x - pos.x, 0, z - pos.z); if (dir.lengthSq() < 1e-6) return; dir.normalize();
       const from = pos.clone().add(new THREE.Vector3(0, 1.35, 0)).addScaledVector(dir, 3.6);
