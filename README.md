@@ -61,6 +61,13 @@ The web build has since grown well beyond the MVP with these battlefield systems
 - **Terrain editor** — a setup **Terrain** tab to add your own buildings, ruins,
   trees, rocks, hedgehogs, and barbed wire anywhere on the field, on top of the
   location's generated terrain.
+- **Fire support (if available)** — call in **artillery barrages** (`Q`) and
+  **air strikes** (`E`) at the mouse point, from a limited pool set per side in
+  the setup **Fire Support** panel. A barrage walks a spread of shells over the
+  target after a short spotting delay; an air strike sends a plane on a
+  bombing/strafing run. Both are **danger close** (they hit friend and foe), and
+  the **enemy calls its own** on your tank clusters. The HUD shows your
+  remaining `◎ ARTY` / `✈ AIR`.
 - **WWII armour tactics** — the AI fights by doctrine, not just "drive at the
   enemy":
   - **Roles by class** — light tanks **scout & flank** (swing to the side/rear),

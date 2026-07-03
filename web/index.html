@@ -105,6 +105,15 @@
           </div>
           <div class="desc" id="loc-desc"></div>
         </div>
+        <div style="margin-top:6px;border-top:1px dashed var(--edge);padding-top:12px">
+          <div style="font-size:12px;opacity:.75;letter-spacing:1px;margin-bottom:8px">FIRE SUPPORT (IF AVAILABLE)</div>
+          <div class="row">
+            <label class="field"><span class="zone-allies">ALLIED ARTILLERY</span><select id="sup-a-arty" style="width:150px"></select></label>
+            <label class="field"><span class="zone-allies">ALLIED AIR STRIKES</span><select id="sup-a-air" style="width:150px"></select></label>
+            <label class="field"><span class="zone-axis">AXIS ARTILLERY</span><select id="sup-x-arty" style="width:150px"></select></label>
+            <label class="field"><span class="zone-axis">AXIS AIR STRIKES</span><select id="sup-x-air" style="width:150px"></select></label>
+          </div>
+        </div>
         <div class="help">
           <b>Controls</b> — W/S drive · A/D steer · Mouse aim · Click/Space fire · <b>Tab</b> switch tank<br>
           RMB orbit camera · MMB / arrow keys pan · Wheel zoom<br>
@@ -175,6 +184,7 @@
         <li><b>W / S</b> — drive forward / reverse &nbsp; <b>A / D</b> — steer</li>
         <li><b>Mouse</b> — aim turret &nbsp; <b>Left click / Space</b> — fire main gun</li>
         <li><b>F</b> — coaxial machine gun (hold) &nbsp; <b>G</b> — deploy a smoke screen</li>
+        <li><b>Q</b> — call an artillery barrage &nbsp; <b>E</b> — call an air strike, at the mouse point (if available; danger close!)</li>
         <li><b>Tab</b> — take command of the next friendly tank (<b>Shift+Tab</b> previous)</li>
         <li><b>Right-drag</b> — orbit camera &nbsp; <b>Middle-drag / arrows</b> — pan &nbsp; <b>Wheel</b> — zoom</li>
         <li>Cross <b>rivers</b> only at bridges · shells punch through cover · disabled crews bail out and fight on</li>
@@ -191,8 +201,8 @@
       <b>WWII TANKS</b><br>
       W/S drive &nbsp; A/D steer<br>
       Mouse aim &nbsp; Click / Space fire<br>
-      <b>F</b> machine gun &nbsp; <b>G</b> smoke &nbsp; <b>Tab</b> switch tank<br>
-      RMB orbit &nbsp; Wheel zoom
+      <b>F</b> MG &nbsp; <b>G</b> smoke &nbsp; <b>Q</b> artillery &nbsp; <b>E</b> air strike<br>
+      <b>Tab</b> switch tank &nbsp; RMB orbit &nbsp; Wheel zoom
     </div>
     <div id="status">—</div>
     <div id="hpbar"><div id="hpfill"></div></div>

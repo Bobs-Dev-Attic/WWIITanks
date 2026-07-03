@@ -26,6 +26,15 @@ function describe() {
 selLoc.onchange = selWx.onchange = describe;
 describe();
 
+// ---- fire-support counts ---------------------------------------------------
+const supSel = { aArty: "sup-a-arty", aAir: "sup-a-air", xArty: "sup-x-arty", xAir: "sup-x-air" };
+for (const id of Object.values(supSel)) { const el = document.getElementById(id); for (let n = 0; n <= 5; n++) el.add(new Option(String(n), String(n))); }
+document.getElementById(supSel.aArty).value = "2";
+document.getElementById(supSel.aAir).value = "1";
+document.getElementById(supSel.xArty).value = "2";
+document.getElementById(supSel.xAir).value = "1";
+const supVal = (id) => parseInt(document.getElementById(id).value, 10) || 0;
+
 // ---- tabs ------------------------------------------------------------------
 for (const tab of document.querySelectorAll(".tab")) {
   tab.onclick = () => {
@@ -165,7 +174,9 @@ const $ = (id) => document.getElementById(id);
 function buildConfig() {
   return { location: selLoc.value, weather: selWx.value,
     allies: { tanks: alliesDep.placed.slice() }, axis: { tanks: axisDep.placed.slice() },
-    props: terrainEd.props.slice() };
+    props: terrainEd.props.slice(),
+    support: { allies: { arty: supVal(supSel.aArty), air: supVal(supSel.aAir) },
+               axis: { arty: supVal(supSel.xArty), air: supVal(supSel.xAir) } } };
 }
 function show(setupVisible) {
   $("setup").style.display = setupVisible ? "flex" : "none";
