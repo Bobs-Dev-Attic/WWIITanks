@@ -13,7 +13,7 @@
 
 import * as THREE from "three";
 
-export const VERSION = "0.8.0";
+export const VERSION = "0.9.0";
 
 // Half-extent of the playable battlefield (world units). Shared with the setup
 // minimaps so deployment coordinates line up with the in-game bounds.
@@ -128,7 +128,16 @@ export function startGame(config) {
   // Entity registries
   const tanks = [], obstacles = [], projectiles = [], grenades = [], crews = [], debris = [], fx = [];
   const puffs = [], burners = [], smokeScreens = []; // smoke/fire/dust particles
+  const aircraft = [], muns = [], timers = [], strikeMarks = []; // fire support
   const bridges = []; // {x, z0, z1, halfW}
+
+  // fire-support inventory ("if available") per side
+  const sc = config.support || {};
+  const support = {
+    allies: { arty: (sc.allies && sc.allies.arty) || 0, air: (sc.allies && sc.allies.air) || 0 },
+    germans: { arty: (sc.axis && sc.axis.arty) || 0, air: (sc.axis && sc.axis.air) || 0 },
+  };
+  const aiSupport = { germans: 10 }; // enemy support cooldown timer
 
   // wind: drifts smoke and dust; stronger in the desert
   const windAngle = 0.7;
@@ -818,6 +827,120 @@ export function startGame(config) {
   }
 
   // ===========================================================================
+  // Fire support: artillery barrages + air strikes (limited, "if available")
+  // ===========================================================================
+  function controlledTeam() { return controlled ? controlled.team : TEAM.ALLIES; }
+  function schedule(delay, fn) { timers.push({ t: delay, fn }); }
+  function updateTimers(dt) {
+    for (let i = timers.length - 1; i >= 0; i--) { timers[i].t -= dt; if (timers[i].t <= 0) { const fn = timers[i].fn; timers.splice(i, 1); fn(); } }
+  }
+  // blast that damages EVERYONE in radius (danger close — friend and foe)
+  function areaBlast(pos, radius, amount) {
+    for (const t of tanks) { if (!t.alive) continue; const d = t.group.position.distanceTo(pos); if (d < radius) hitTank(t, { type: "he", top: true }, pos.clone().setY(1), amount * (1 - d / radius)); }
+    for (const c of crews) { if (!c.alive) continue; const d = c.group.position.distanceTo(pos); if (d < radius) hurtCrew(c, amount * 1.6 * (1 - d / radius)); }
+  }
+  // a plunging shell/bomb that detonates on the ground
+  function dropMunition(x, z, o = {}) {
+    const mesh = box(0.4, 1.1, 0.4, 0x2a2a2a); mesh.position.set(x, o.height || 60, z); scene.add(mesh);
+    muns.push({ mesh, vy: -(o.speed || 55), x, z, dmg: o.dmg || 60, radius: o.radius || 8 });
+  }
+  function updateMuns(dt) {
+    for (let i = muns.length - 1; i >= 0; i--) {
+      const m = muns[i]; m.mesh.position.y += m.vy * dt; m.mesh.rotation.x += dt * 5;
+      if (m.mesh.position.y <= 0.4) {
+        const pos = new THREE.Vector3(m.x, 0.5, m.z);
+        explode(pos, true); spawnChips(pos, 0x6a5a3a, 14, 9); areaBlast(pos, m.radius, m.dmg);
+        scene.remove(m.mesh); muns.splice(i, 1);
+      }
+    }
+  }
+  function addStrikeMark(pos, ttl, color) {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(2.4, 3.2, 20), new THREE.MeshBasicMaterial({ color: color || 0xff5a3a, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2; ring.position.set(pos.x, 0.2, pos.z); scene.add(ring);
+    strikeMarks.push({ ring, ttl, t: 0 });
+  }
+  function updateStrikeMarks(dt) {
+    for (let i = strikeMarks.length - 1; i >= 0; i--) { const m = strikeMarks[i]; m.ttl -= dt; m.t += dt;
+      const s = 1 + Math.sin(m.t * 6) * 0.15; m.ring.scale.set(s, s, s); m.ring.material.opacity = 0.4 + 0.4 * Math.abs(Math.sin(m.t * 4));
+      if (m.ttl <= 0) { scene.remove(m.ring); strikeMarks.splice(i, 1); } }
+  }
+
+  function callArtillery(team, target) {
+    if (support[team].arty <= 0) return false;
+    support[team].arty--;
+    const cx = target.x, cz = target.z;
+    addStrikeMark(new THREE.Vector3(cx, 0, cz), 4.6, 0xffb020);
+    for (let i = 0; i < 12; i++) {
+      const delay = 1.8 + i * 0.24 + Math.random() * 0.18;
+      const ox = cx + rand(-14, 14), oz = cz + rand(-14, 14);
+      schedule(delay, () => dropMunition(ox, oz, { dmg: 58, radius: 8, height: 62, speed: 58 }));
+    }
+    if (team === controlledTeam()) banner("ARTILLERY INBOUND", 1.6);
+    updateHUD();
+    return true;
+  }
+
+  function buildPlane(team) {
+    const g = new THREE.Group();
+    const col = team === TEAM.ALLIES ? 0x4a5834 : 0x5a5c60;
+    const fus = box(0.9, 0.8, 5.5, col); g.add(fus);
+    const wing = box(7.5, 0.25, 1.3, col); wing.position.y = 0.1; g.add(wing);
+    const tail = box(2.6, 0.2, 0.9, col); tail.position.set(0, 0.2, -2.4); g.add(tail);
+    const fin = box(0.2, 1.0, 0.9, col); fin.position.set(0, 0.5, -2.4); g.add(fin);
+    const nose = box(0.7, 0.7, 0.7, 0x222222); nose.position.z = 2.9; g.add(nose);
+    scene.add(g); return g;
+  }
+  function callAir(team, target) {
+    if (support[team].air <= 0) return false;
+    support[team].air--;
+    const dir = team === TEAM.ALLIES ? 1 : -1; // allies run south→north, axis north→south
+    const g = buildPlane(team);
+    g.position.set(target.x + rand(-6, 6), 34, target.z - dir * 190);
+    g.rotation.y = dir > 0 ? Math.PI : 0;
+    aircraft.push({ g, dir, tx: target.x, tz: target.z, team, dropped: 0, strafeCd: 0.3 });
+    addStrikeMark(new THREE.Vector3(target.x, 0, target.z), 3.5, 0x5ac8ff);
+    if (team === controlledTeam()) banner("AIR STRIKE INBOUND", 1.6);
+    updateHUD();
+    return true;
+  }
+  function updateAircraft(dt) {
+    for (let i = aircraft.length - 1; i >= 0; i--) {
+      const a = aircraft[i];
+      a.g.position.z += a.dir * 78 * dt;
+      a.g.position.x += Math.sin(a.g.position.z * 0.05) * 0.2; // gentle weave
+      a.g.rotation.z = Math.sin(a.g.position.z * 0.08) * 0.15;
+      if (Math.abs(a.g.position.z - a.tz) < 44) {
+        a.strafeCd -= dt;
+        if (a.strafeCd <= 0) { a.strafeCd = 0.07; // strafing run
+          const from = a.g.position.clone();
+          const dir = new THREE.Vector3(rand(-0.05, 0.05), -0.75, a.dir * 0.66).normalize();
+          fireProjectile(from, dir, a.team, "mg", null, null, false);
+        }
+        if (a.dropped < 6 && Math.random() < 0.5) { a.dropped++; dropMunition(a.g.position.x + rand(-3, 3), a.g.position.z + a.dir * 3, { dmg: 52, radius: 7, height: a.g.position.y, speed: 64 }); }
+      }
+      if (Math.abs(a.g.position.z) > BOUND + 210) { scene.remove(a.g); aircraft.splice(i, 1); }
+    }
+  }
+
+  // enemy AI spends its own support on clusters of allied armour
+  function updateAiSupport(dt) {
+    for (const team of [TEAM.GERMANS]) {
+      if (support[team].arty <= 0 && support[team].air <= 0) continue;
+      aiSupport[team] -= dt;
+      if (aiSupport[team] > 0) continue;
+      aiSupport[team] = 16 + Math.random() * 10;
+      // aim at the biggest cluster of the opposing team's tanks
+      const foes = tanks.filter((t) => t.alive && !t.disabled && t.team !== team);
+      if (foes.length === 0) { aiSupport[team] = 6; continue; }
+      let best = foes[0], bestN = 0;
+      for (const f of foes) { let n = 0; for (const g of foes) if (g.group.position.distanceTo(f.group.position) < 18) n++; if (n > bestN) { bestN = n; best = f; } }
+      const tgt = best.group.position.clone();
+      if (support[team].air > 0 && (support[team].arty <= 0 || Math.random() < 0.4)) callAir(team, tgt);
+      else callArtillery(team, tgt);
+    }
+  }
+
+  // ===========================================================================
   // Tank damage (location-based)
   // ===========================================================================
   function hitTank(t, proj, hitPos, overrideDmg) {
@@ -829,7 +952,7 @@ export function startGame(config) {
     const heavy = proj.type === "ap" || proj.type === "he";
     // armour facing: thick sloped glacis up front bounces shots; sides & rear are weak
     let facing = 1;
-    if (heavy) {
+    if (heavy && !proj.top) { // plunging fire (artillery/bombs) ignores hull facing — thin deck armour
       if (local.z > 0.5 && local.z > Math.abs(local.x)) facing = 0.55;      // frontal
       else if (local.z < -0.4) facing = 1.5;                                // rear
       else facing = 1.2;                                                    // side
@@ -911,6 +1034,8 @@ export function startGame(config) {
     keys[e.key.toLowerCase()] = true;
     if (e.key === " ") { e.preventDefault(); tryFire(); }
     if (e.key.toLowerCase() === "g") { e.preventDefault(); if (controlled && controlled.alive && !gameOver) deploySmoke(controlled); }
+    if (e.key.toLowerCase() === "q" && !gameOver) { e.preventDefault(); callArtillery(controlledTeam(), aimPoint.clone()); }
+    if (e.key.toLowerCase() === "e" && !gameOver) { e.preventDefault(); callAir(controlledTeam(), aimPoint.clone()); }
   }, { signal: sig });
   addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; }, { signal: sig });
 
@@ -1127,8 +1252,10 @@ export function startGame(config) {
   const elReloadFill = document.createElement("div"); elReloadFill.style.cssText = "height:100%;width:0%;background:linear-gradient(90deg,#e0a12a,#ffe08a)";
   const elReloadLabel = document.createElement("div"); elReloadLabel.style.cssText = "position:absolute;top:224px;left:18px;font-size:11px;letter-spacing:1px;opacity:.85";
   elReload.appendChild(elReloadFill); hud.append(elReload, elReloadLabel);
+  const elSupport = document.createElement("div"); elSupport.style.cssText = "position:absolute;top:242px;left:18px;font-size:12px;letter-spacing:1px;opacity:.9";
+  hud.append(elSupport);
   // track HUD nodes we created so dispose() can remove them
-  const ownHudNodes = [elReload, elReloadLabel];
+  const ownHudNodes = [elReload, elReloadLabel, elSupport];
 
   function updateHUD() {
     if (!controlled) { elStatus.textContent = `ALLIES ${alliesLeft}   ENEMIES ${enemiesLeft}`; elFill.style.width = "0%"; return; }
@@ -1137,6 +1264,8 @@ export function startGame(config) {
     elStatus.textContent = `${t.name}  ${pct}%   ALLIES ${alliesLeft}   ENEMIES ${enemiesLeft}` + (flags.length ? "  [" + flags.join(" ") + "]" : "");
     elFill.style.width = pct + "%";
     elFill.style.background = pct <= 30 ? "linear-gradient(90deg,#e0574a,#ff8a6a)" : "linear-gradient(90deg,#7ac74f,#b6e36a)";
+    const s = support[controlledTeam()];
+    elSupport.innerHTML = `<span style="color:#ffb020">◎ ARTY ×${s.arty}</span> <span style="opacity:.5">[Q]</span> &nbsp; <span style="color:#5ac8ff">✈ AIR ×${s.air}</span> <span style="opacity:.5">[E]</span>`;
   }
   function updateReloadHud() {
     const t = controlled;
@@ -1169,6 +1298,7 @@ export function startGame(config) {
     updateCrew(dt);
     updateProjectiles(dt); updateGrenades(dt); updateFx(dt); updateDebris(dt); updatePrecip(dt);
     updatePuffs(dt); updateBurners(dt); updateSmokeScreens(dt); updateDust(dt);
+    updateMuns(dt); updateAircraft(dt); updateTimers(dt); updateStrikeMarks(dt); updateAiSupport(dt);
     for (const tk of tanks) updateTankBars(tk);
     updateReloadHud(); updateHUD(); updateCamera(dt);
     if (bannerTimer > 0 && !gameOver) { bannerTimer -= dt; if (bannerTimer <= 0) elBanner.style.opacity = 0; }
@@ -1205,6 +1335,9 @@ export function startGame(config) {
     get keyF() { return !!keys["f"]; }, mgFireNow() { if (controlled) fireMG(controlled, aimPoint.clone().setY(1), true); },
     smokeNow() { if (controlled) deploySmoke(controlled); },
     terrainBlocksAt(ax, az, bx, bz) { return terrainBlocks({ x: ax, z: az }, { x: bx, z: bz }); },
+    get support() { return support; }, get muns() { return muns; }, get aircraft() { return aircraft; },
+    callArty(x, z, team) { return callArtillery(team || TEAM.ALLIES, new THREE.Vector3(x, 0, z)); },
+    callAirstrike(x, z, team) { return callAir(team || TEAM.ALLIES, new THREE.Vector3(x, 0, z)); },
     testFacing(idx, where) { const tk = tanks[idx]; if (!tk) return null; const before = tk.health;
       const off = where === "front" ? new THREE.Vector3(0, 0.4, 1.3) : where === "rear" ? new THREE.Vector3(0, 0.4, -1.3) : new THREE.Vector3(1.3, 0.4, 0);
       const wp = tk.group.localToWorld(off.clone());
