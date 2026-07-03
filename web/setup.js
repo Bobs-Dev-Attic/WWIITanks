@@ -46,7 +46,8 @@ for (const tab of document.querySelectorAll(".tab")) {
 }
 
 // ---- deployment (per-type counts + minimap placement) ----------------------
-const TYPE_COLORS = { stuart: "#8fd06a", sherman: "#5f9e3a", pershing: "#3f6f28", panzer2: "#c9b08a", panzer4: "#9a8f72", tiger: "#6f6552" };
+const TYPE_COLORS = { stuart: "#8fd06a", sherman: "#5f9e3a", pershing: "#3f6f28", panzer2: "#c9b08a", panzer4: "#9a8f72", tiger: "#6f6552",
+  halftrack: "#c8d08a", jeep: "#e0d27a", moto: "#e6a15a", kubelwagen: "#d6c58a" };
 const WORLD = FIELD, CAP = 14;
 const cl = (v) => Math.max(-WORLD, Math.min(WORLD, v));
 
@@ -63,7 +64,10 @@ function makeDeployer(team, canvasId, palId, cntId, clrId, autoId, autoN) {
     const row = document.createElement("div");
     row.className = "urow" + (i === 0 ? " sel" : ""); row.dataset.type = key;
     const name = document.createElement("span"); name.className = "uname"; name.textContent = spec.name;
-    const stat = document.createElement("span"); stat.className = "ustat"; stat.textContent = `HP ${spec.health} · RLD ${spec.reload}s · SPD ${spec.maxFwd} · DMG ${spec.dmg}`;
+    const stat = document.createElement("span"); stat.className = "ustat";
+    stat.textContent = (spec.cls && spec.cls !== "tank")
+      ? `HP ${spec.health} · SPD ${spec.maxFwd} · MG only${spec.crew ? " · carries " + spec.crew : ""}`
+      : `HP ${spec.health} · RLD ${spec.reload}s · SPD ${spec.maxFwd} · DMG ${spec.dmg}`;
     const step = document.createElement("span"); step.className = "ustep";
     const minus = document.createElement("button"); minus.textContent = "−";
     const cnt = document.createElement("b"); cnt.className = "ucount"; cnt.textContent = "0";

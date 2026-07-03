@@ -13,7 +13,7 @@
 
 import * as THREE from "three";
 
-export const VERSION = "0.10.2";
+export const VERSION = "0.11.0";
 
 // Half-extent of the playable battlefield (world units). Shared with the setup
 // minimaps so deployment coordinates line up with the in-game bounds.
@@ -40,16 +40,23 @@ export const WEATHER = {
   fog:      { name: "Heavy Fog",sky: 0xb7bcc0, fog: [40, 130],  sun: 0.5,  amb: 0.85, tint: 0.9,  precip: null },
 };
 
+// cls "tank" = turreted armour; "apc"/"jeep"/"moto" = soft MG-armed vehicles
 export const TANK_TYPES = {
   allies: {
-    stuart:   { name: "M5 Stuart (Light)",   health: 70,  reload: 0.8, maxFwd: 15, big: false, color: 0x4a5834, dmg: 30 },
-    sherman:  { name: "M4 Sherman (Medium)", health: 115, reload: 1.1, maxFwd: 12, big: false, color: 0x556b2f, dmg: 42 },
-    pershing: { name: "M26 Pershing (Heavy)",health: 175, reload: 1.7, maxFwd: 9,  big: true,  color: 0x4d5a3a, dmg: 56 },
+    stuart:    { name: "M5 Stuart (Light)",    health: 70,  reload: 0.8, maxFwd: 15, big: false, color: 0x4a5834, dmg: 30, cls: "tank" },
+    sherman:   { name: "M4 Sherman (Medium)",  health: 115, reload: 1.1, maxFwd: 12, big: false, color: 0x556b2f, dmg: 42, cls: "tank" },
+    pershing:  { name: "M26 Pershing (Heavy)", health: 175, reload: 1.7, maxFwd: 9,  big: true,  color: 0x4d5a3a, dmg: 56, cls: "tank" },
+    halftrack: { name: "M3 Half-track (APC)",  health: 60,  maxFwd: 16, color: 0x4a5834, cls: "apc",  crew: 6 },
+    jeep:      { name: "Willys Jeep (.50 cal)",health: 26,  maxFwd: 22, color: 0x4a5834, cls: "jeep", crew: 2 },
+    moto:      { name: "Motorcycle",           health: 15,  maxFwd: 26, color: 0x37372e, cls: "moto", crew: 1 },
   },
   germans: {
-    panzer2:  { name: "Panzer II (Light)",   health: 65,  reload: 0.85,maxFwd: 15, big: false, color: 0x6a6e72, dmg: 28 },
-    panzer4:  { name: "Panzer IV (Medium)",  health: 120, reload: 1.2, maxFwd: 11, big: true,  color: 0x606468, dmg: 44 },
-    tiger:    { name: "Tiger I (Heavy)",     health: 205, reload: 1.9, maxFwd: 8,  big: true,  color: 0x585c60, dmg: 62 },
+    panzer2:   { name: "Panzer II (Light)",    health: 65,  reload: 0.85,maxFwd: 15, big: false, color: 0x6a6e72, dmg: 28, cls: "tank" },
+    panzer4:   { name: "Panzer IV (Medium)",   health: 120, reload: 1.2, maxFwd: 11, big: true,  color: 0x606468, dmg: 44, cls: "tank" },
+    tiger:     { name: "Tiger I (Heavy)",      health: 205, reload: 1.9, maxFwd: 8,  big: true,  color: 0x585c60, dmg: 62, cls: "tank" },
+    halftrack: { name: "Sd.Kfz. 251 (APC)",    health: 58,  maxFwd: 16, color: 0x5a5c60, cls: "apc",  crew: 6 },
+    kubelwagen:{ name: "Kübelwagen (MG)",      health: 24,  maxFwd: 22, color: 0x5a5c60, cls: "jeep", crew: 2 },
+    moto:      { name: "Motorcycle + Sidecar", health: 16,  maxFwd: 26, color: 0x45453d, cls: "moto", crew: 2 },
   },
 };
 
@@ -567,23 +574,67 @@ export function startGame(config) {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ color, depthTest: false, depthWrite: false }));
     s.center.set(0, 0.5); s.position.set(-width / 2, y, 0); s.scale.set(width, 0.22, 1); s.renderOrder = 999; return s;
   }
+
+  // low-poly soft vehicles: APC (half-track), MG jeep, motorcycle. The "turret"
+  // group here is the pintle/MG mount so the aiming/MG code works unchanged.
+  function buildVehicle(cls, color) {
+    const group = new THREE.Group(), parts = {}, wheel = 0x1c1c1c, turret = new THREE.Group();
+    if (cls === "apc") {
+      parts.lower = box(2.0, 0.55, 4.0, color); parts.lower.position.y = 0.55; group.add(parts.lower);
+      const cab = box(2.0, 0.5, 1.3, color); cab.position.set(0, 1.0, 1.2); group.add(cab);
+      const bed = box(1.7, 0.5, 2.3, color); bed.position.set(0, 1.05, -0.6); group.add(bed); // open troop bay walls
+      const wsh = box(1.8, 0.5, 0.08, 0x2b2f33); wsh.position.set(0, 1.15, 1.85); group.add(wsh);
+      for (const sx of [-1.02, 1.02]) { const tr = box(0.4, 0.5, 2.2, wheel); tr.position.set(sx, 0.3, -0.7); group.add(tr); } // rear tracks
+      for (const sx of [-0.95, 0.95]) { const w = box(0.4, 0.5, 0.5, wheel); w.position.set(sx, 0.3, 1.5); group.add(w); }        // front wheels
+      turret.position.set(0, 1.35, -0.6);
+      const mg = box(0.12, 0.12, 1.1, 0x24201a); mg.position.z = 0.5; turret.add(mg);
+      const shield = box(0.7, 0.5, 0.1, color); shield.position.z = -0.1; turret.add(shield);
+    } else if (cls === "jeep") {
+      parts.lower = box(1.5, 0.4, 2.7, color); parts.lower.position.y = 0.5; group.add(parts.lower);
+      const hood = box(1.4, 0.35, 0.9, color); hood.position.set(0, 0.72, 0.95); group.add(hood);
+      const wsh = box(1.4, 0.5, 0.06, 0x2b2f33); wsh.position.set(0, 0.95, 0.5); group.add(wsh);
+      for (const sx of [-0.8, 0.8]) for (const sz of [-1.05, 1.05]) { const w = box(0.35, 0.55, 0.55, wheel); w.position.set(sx, 0.3, sz); group.add(w); }
+      turret.position.set(0, 0.9, -0.7);
+      const post = box(0.1, 0.5, 0.1, 0x333333); post.position.y = -0.1; turret.add(post);
+      const mg = box(0.1, 0.1, 1.0, 0x24201a); mg.position.set(0, 0.2, 0.45); turret.add(mg);
+    } else { // moto
+      parts.lower = box(0.35, 0.35, 1.9, color); parts.lower.position.y = 0.55; group.add(parts.lower);
+      const seat = box(0.4, 0.2, 0.6, 0x1a1a1a); seat.position.set(0, 0.78, -0.3); group.add(seat);
+      for (const sz of [-0.85, 0.85]) { const w = box(0.18, 0.7, 0.7, wheel); w.position.set(0, 0.35, sz); group.add(w); }
+      const bar = box(0.7, 0.08, 0.08, 0x222222); bar.position.set(0, 0.95, 0.8); group.add(bar);
+      const rider = box(0.4, 0.7, 0.4, 0x5a5c50); rider.position.set(0, 1.1, -0.2); group.add(rider);
+      const side = box(0.6, 0.4, 1.3, color); side.position.set(0.7, 0.45, -0.1); group.add(side); // sidecar
+      const sw = box(0.16, 0.6, 0.6, wheel); sw.position.set(0.7, 0.32, -0.6); group.add(sw);
+      turret.position.set(0.7, 0.85, 0.2);
+      const mg = box(0.09, 0.09, 0.9, 0x24201a); mg.position.z = 0.4; turret.add(mg);
+    }
+    group.add(turret);
+    group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    return { group, turret, parts };
+  }
+
   function spawnTank(team, typeKey, x, z, yaw) {
     const spec = TANK_TYPES[team][typeKey] || Object.values(TANK_TYPES[team])[0];
-    const built = buildTank(spec.color, spec.big);
+    const cls = spec.cls || "tank";
+    const isTank = cls === "tank";
+    const built = isTank ? buildTank(spec.color, spec.big) : buildVehicle(cls, spec.color);
     built.group.position.set(x, 0, z); built.group.rotation.y = yaw || 0; scene.add(built.group);
-    const bars = new THREE.Group(); bars.position.y = 3.3;
+    const bars = new THREE.Group(); bars.position.y = isTank ? 3.3 : 2.4;
     const hpBg = makeBar(0x111111, 0, 2.2), hpFill = makeBar(0x7ac74f, 0, 2.2);
     const rlBg = makeBar(0x111111, -0.32, 2.2), rlFill = makeBar(0xffd24a, -0.32, 2.2);
     bars.add(hpBg, hpFill, rlBg, rlFill); built.group.add(bars);
-    // WWII role/doctrine by class: fast lights scout & flank, heavies support by
-    // fire from standoff, everything else forms the manoeuvring line.
-    const role = spec.maxFwd >= 14 ? "scout" : (spec.health >= 170 ? "support" : "line");
+    // role/doctrine: fast lights scout & flank, heavies support by fire, mediums
+    // form the line; soft vehicles raid (jeep/moto) or carry troops (apc).
+    const role = !isTank ? (cls === "apc" ? "apc" : "raider")
+      : (spec.maxFwd >= 14 ? "scout" : (spec.health >= 170 ? "support" : "line"));
+    const radius = isTank ? 1.8 : (cls === "apc" ? 1.5 : cls === "jeep" ? 1.1 : 0.9);
     const t = { team, typeKey, name: spec.name, group: built.group, turret: built.turret, parts: built.parts,
-      yaw: yaw || 0, turretYaw: 0, speed: 0, health: spec.health, maxHealth: spec.health, radius: 1.8,
-      cooldown: 0, reload: spec.reload, maxFwd: spec.maxFwd, dmg: spec.dmg, big: spec.big, mgCd: 0, smokeCd: 0,
+      yaw: yaw || 0, turretYaw: 0, speed: 0, health: spec.health, maxHealth: spec.health, radius,
+      cooldown: 0, reload: spec.reload || 1, maxFwd: spec.maxFwd, dmg: spec.dmg || 0, big: !!spec.big, mgCd: 0, smokeCd: 0,
+      cls, armored: isTank, mainGun: isTank, mgOnly: !isTank,
       role, bound: tanks.length % 2, smoked: false,
       leftTrackBroken: false, rightTrackBroken: false, turretGone: false, alive: true, disabled: false,
-      crewCount: spec.big ? 4 : 3, hasGrenades: Math.random() < 0.6, bars, hpFill, rlFill, rlBg };
+      crewCount: spec.crew != null ? spec.crew : (spec.big ? 4 : 3), hasGrenades: Math.random() < 0.6, bars, hpFill, rlFill, rlBg };
     tanks.push(t); return t;
   }
 
@@ -771,7 +822,7 @@ export function startGame(config) {
     projectiles.push({ mesh, dir: dir.clone().normalize(), team, type, life: spec.life, spec, dmg, owner: owner || null, ff: !!ff, hitObs: new Set() });
   }
   function fireTank(t) {
-    if (t.turretGone || t.cooldown > 0 || !t.alive) return false;
+    if (!t.mainGun || t.turretGone || t.cooldown > 0 || !t.alive) return false;
     t.cooldown = t.reload;
     const yaw = t.yaw + t.turretYaw, dir = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
     const from = t.group.position.clone().add(new THREE.Vector3(0, 1.35, 0)).addScaledVector(dir, 3.6);
@@ -962,23 +1013,24 @@ export function startGame(config) {
     const heavy = proj.type === "ap" || proj.type === "he";
     // armour facing: thick sloped glacis up front bounces shots; sides & rear are weak
     let facing = 1;
-    if (heavy && !proj.top) { // plunging fire (artillery/bombs) ignores hull facing — thin deck armour
+    if (heavy && !proj.top && t.armored) { // plunging fire ignores hull facing; soft vehicles have no armour
       if (local.z > 0.5 && local.z > Math.abs(local.x)) facing = 0.55;      // frontal
       else if (local.z < -0.4) facing = 1.5;                                // rear
       else facing = 1.2;                                                    // side
       dmg *= facing;
       if (facing < 0.6 && Math.random() < 0.4) { spawnChips(hitPos.clone(), 0xffe08a, 5, 5); dmg *= 0.4; } // ricochet off the glacis
     }
-    if (proj.type === "mg") { dmg *= 0.5; spawnChips(hitPos.clone(), 0xffe08a, 3, 3); }
+    // MG mostly pings off tank armour, but shreds soft-skinned vehicles and crew
+    if (proj.type === "mg") { if (t.armored) dmg *= 0.5; spawnChips(hitPos.clone(), 0xffe08a, 3, 3); }
     t.health -= dmg;
-    if (heavy && side && local.y < 0.75 && !(local.x < 0 ? t.leftTrackBroken : t.rightTrackBroken) && Math.random() < 0.7) {
+    if (t.armored && heavy && side && local.y < 0.75 && !(local.x < 0 ? t.leftTrackBroken : t.rightTrackBroken) && Math.random() < 0.7) {
       const left = local.x < 0;
       if (left) { t.leftTrackBroken = true; detachAsDebris(t.parts.leftTrack); } else { t.rightTrackBroken = true; detachAsDebris(t.parts.rightTrack); }
       spawnChips(hitPos.clone(), 0x222222, 8, 5);
     }
-    if (heavy && !t.turretGone && (high || t.health <= t.maxHealth * 0.35) && Math.random() < (high ? 0.5 : 0.25)) blowTurret(t);
-    if (heavy && !high && Math.random() < 0.3 && t.parts.cupola.parent) detachAsDebris(t.parts.cupola, new THREE.Vector3(rand(-2, 2), 4, rand(-2, 2)));
-    if (heavy && Math.random() < 0.25 && t.parts.fender && t.parts.fender.parent) detachAsDebris(t.parts.fender, new THREE.Vector3(rand(-3, 3), 2, rand(-3, 3)));
+    if (t.armored && heavy && !t.turretGone && (high || t.health <= t.maxHealth * 0.35) && Math.random() < (high ? 0.5 : 0.25)) blowTurret(t);
+    if (t.armored && heavy && !high && Math.random() < 0.3 && t.parts.cupola && t.parts.cupola.parent) detachAsDebris(t.parts.cupola, new THREE.Vector3(rand(-2, 2), 4, rand(-2, 2)));
+    if (t.armored && heavy && Math.random() < 0.25 && t.parts.fender && t.parts.fender.parent) detachAsDebris(t.parts.fender, new THREE.Vector3(rand(-3, 3), 2, rand(-3, 3)));
     if (t.health <= 0) disableTank(t);
     else if (t === controlled) flashHud();
   }
@@ -1213,9 +1265,34 @@ export function startGame(config) {
   }
 
   // ---- role-based WWII armour AI -----------------------------------------
+  // Soft MG vehicles: raiders (jeep/moto) dash in, rake with the MG and keep
+  // their distance from tanks; APCs push up, machine-gun, and unload infantry.
+  function updateVehicleAI(t, dt) {
+    const pos = t.group.position;
+    const { target } = nearestEnemyEntity(pos, t.team, 220);
+    if (!target) { driveTank(t, 0, 0, dt); return; }
+    const tp = target.group.position, dist = Math.hypot(tp.x - pos.x, tp.z - pos.z);
+    const aimYaw = Math.atan2(tp.x - pos.x, tp.z - pos.z);
+    // dodge enemy tanks (they'd shred us); otherwise close to MG range
+    const nearTank = nearestEnemyTank(t);
+    const flee = nearTank.target && nearTank.dist < (t.cls === "apc" ? 16 : 24);
+    let faceYaw, throttle;
+    if (flee) { const away = new THREE.Vector3(pos.x - nearTank.target.group.position.x, 0, pos.z - nearTank.target.group.position.z);
+      faceYaw = navHeading(t, pos.clone().add(away)); throttle = 1; }
+    else if (dist > 30) { faceYaw = navHeading(t, tp); throttle = 1; }
+    else { faceYaw = aimYaw; throttle = t.cls === "moto" ? 0.6 : 0.2; } // keep moving (harder to hit)
+    const step = shortAngle(t.yaw, faceYaw);
+    driveTank(t, throttle, clamp(-step * 2.2, -1, 1), dt);
+    // swing the pintle MG onto the target and fire
+    const rel = aimYaw - t.yaw, s = shortAngle(t.turretYaw, rel);
+    t.turretYaw += clamp(s, -deg(220) * dt, deg(220) * dt); t.turret.rotation.y = t.turretYaw;
+    if (t.mgCd <= 0 && dist < 44 && !smokeBlocks(pos, tp) && !terrainBlocks(pos, tp)) fireMG(t, tp.clone().setY(1), false);
+  }
+
   function updateAITank(t, dt) {
     if (!t.alive) return;
     if (t.cooldown > 0) t.cooldown -= dt; if (t.mgCd > 0) t.mgCd -= dt; if (t.smokeCd > 0) t.smokeCd -= dt;
+    if (t.mgOnly) { updateVehicleAI(t, dt); return; }
     const pos = t.group.position;
     const { target: enemyTank, dist: tankDist } = nearestEnemyTank(t);
     const foot = nearestEnemyEntity(pos, t.team, 42, true).target;
@@ -1305,6 +1382,7 @@ export function startGame(config) {
   }
   function updateReloadHud() {
     const t = controlled;
+    if (t && t.mgOnly) { elReloadFill.style.width = "100%"; elReloadFill.style.background = "linear-gradient(90deg,#6a86c0,#9fb4e0)"; elReloadLabel.textContent = "MACHINE GUN (F) — NO MAIN GUN"; return; }
     if (!t || !t.alive || t.turretGone) { elReloadFill.style.width = "0%"; elReloadLabel.textContent = t && t.turretGone ? "GUN DISABLED" : ""; return; }
     if (t.cooldown > 0) { const p = clamp(1 - t.cooldown / t.reload, 0, 1); elReloadFill.style.width = (p * 100) + "%";
       elReloadFill.style.background = p > 0.85 ? "linear-gradient(90deg,#5fbf4f,#8ef08a)" : "linear-gradient(90deg,#e0a12a,#ffe08a)"; elReloadLabel.textContent = `RELOADING ${t.cooldown.toFixed(1)}s`; }
