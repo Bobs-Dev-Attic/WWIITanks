@@ -13,7 +13,7 @@
 
 import * as THREE from "three";
 
-export const VERSION = "0.10.1";
+export const VERSION = "0.10.2";
 
 // Half-extent of the playable battlefield (world units). Shared with the setup
 // minimaps so deployment coordinates line up with the in-game bounds.
@@ -493,6 +493,8 @@ export function startGame(config) {
     const spot = (minGap) => {
       for (let k = 0; k < 40; k++) { const x = rand(-R, R), z = rand(-R, R);
         if (Math.abs(x) < 10 && z < -30 && z > -70) continue; // keep allied start clear
+        // keep bridge approach lanes clear so vehicles can actually cross
+        if (river && z > river.z0 - 16 && z < river.z1 + 16 && BRIDGE_XS.some((bx) => Math.abs(x - bx) < 11)) continue;
         if (!tooClose(x, z, minGap)) { placed.push({ x, z }); return [x, z]; } }
       return null;
     };
@@ -1099,6 +1101,32 @@ export function startGame(config) {
     const from = t.group.position.clone().add(new THREE.Vector3(0, 1.4, 0));
     throwSmoke(from, t.group.position.clone().addScaledVector(dir, 24), t.team);
   }
+  // No two vehicles may occupy the same space: relax overlapping tank/wreck
+  // pairs apart (moving both), then keep each out of the map edge, rivers, and
+  // hard obstacles it was shoved into.
+  function separateTanks() {
+    const prev = tanks.map((t) => t.group.position.clone()); // valid positions from driveTank
+    for (let iter = 0; iter < 4; iter++) {
+      for (let i = 0; i < tanks.length; i++) {
+        for (let j = i + 1; j < tanks.length; j++) {
+          const a = tanks[i].group.position, b = tanks[j].group.position;
+          let dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
+          const min = (tanks[i].radius + tanks[j].radius) * 0.95;
+          if (d < min) {
+            if (d < 1e-3) { dx = rand(-1, 1); dz = rand(-1, 1); d = Math.hypot(dx, dz) || 1; }
+            const push = (min - d) / 2, nx = dx / d, nz = dz / d;
+            a.x -= nx * push; a.z -= nz * push; b.x += nx * push; b.z += nz * push;
+          }
+        }
+      }
+    }
+    for (let i = 0; i < tanks.length; i++) {
+      const t = tanks[i], p = t.group.position;
+      p.x = clamp(p.x, -BOUND, BOUND); p.z = clamp(p.z, -BOUND, BOUND);
+      resolveObstacles(p, t.radius, false, null);       // pushed into a wall? slide out (don't crush from a nudge)
+      if (inRiver(p) && !onBridge(p)) p.copy(prev[i]);   // never let separation shove a vehicle into the river
+    }
+  }
   function updateControlled(dt) {
     const t = controlled; if (!t || !t.alive) return;
     if (t.cooldown > 0) t.cooldown -= dt;
@@ -1303,6 +1331,7 @@ export function startGame(config) {
     updateAim();
     updateControlled(dt);
     for (const tk of tanks) if (tk !== controlled) updateAITank(tk, dt);
+    separateTanks();
     updateCrew(dt);
     updateProjectiles(dt); updateGrenades(dt); updateFx(dt); updateDebris(dt); updatePrecip(dt);
     updatePuffs(dt); updateBurners(dt); updateSmokeScreens(dt); updateDust(dt);
