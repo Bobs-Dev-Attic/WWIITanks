@@ -13,7 +13,7 @@
 
 import * as THREE from "three";
 
-export const VERSION = "0.6.0";
+export const VERSION = "0.6.1";
 
 // Half-extent of the playable battlefield (world units). Shared with the setup
 // minimaps so deployment coordinates line up with the in-game bounds.
@@ -627,17 +627,18 @@ export function startGame(config) {
     ap: { speed: 78, life: 2.5, geo: shellGeo, mat: shellMat, crewDmg: 100, obsDmg: 55, big: true },
     mg: { speed: 60, life: 1.5, geo: mgGeo, mat: mgMat, tankDmg: 4, crewDmg: 14, obsDmg: 6, big: false },
   };
-  function fireProjectile(from, dir, team, type, dmg) {
+  function fireProjectile(from, dir, team, type, dmg, owner, ff) {
     const spec = PROJ[type];
     const mesh = new THREE.Mesh(spec.geo, spec.mat); mesh.position.copy(from); scene.add(mesh);
-    projectiles.push({ mesh, dir: dir.clone().normalize(), team, type, life: spec.life, spec, dmg, hitObs: new Set() });
+    projectiles.push({ mesh, dir: dir.clone().normalize(), team, type, life: spec.life, spec, dmg, owner: owner || null, ff: !!ff, hitObs: new Set() });
   }
   function fireTank(t) {
     if (t.turretGone || t.cooldown > 0 || !t.alive) return false;
     t.cooldown = t.reload;
     const yaw = t.yaw + t.turretYaw, dir = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
     const from = t.group.position.clone().add(new THREE.Vector3(0, 1.35, 0)).addScaledVector(dir, 3.6);
-    fireProjectile(from, dir, t.team, "ap", t.dmg);
+    // the player can shoot anything — their shells ignore team (friendly fire)
+    fireProjectile(from, dir, t.team, "ap", t.dmg, t, t === controlled);
     t.speed -= 3;
     if (t === controlled) cam.shake = Math.min(1.6, cam.shake + 0.5);
     return true;
@@ -649,9 +650,9 @@ export function startGame(config) {
       const p = s.mesh.position; let done = false;
       for (const o of obstacles) { if (o.destroyed || o.radius <= 0 || s.hitObs.has(o) || o.type === "wire") continue;
         if (Math.hypot(p.x - o.pos.x, p.z - o.pos.z) < o.radius && p.y < 5) { s.hitObs.add(o); damageObstacle(o, s.spec.obsDmg, p.clone()); } }
-      for (const t of tanks) { if (!t.alive || t.team === s.team) continue;
+      for (const t of tanks) { if (!t.alive || t === s.owner) continue; if (!s.ff && t.team === s.team) continue;
         if (p.distanceTo(t.group.position.clone().setY(1)) < t.radius + 0.5) { hitTank(t, s, p.clone()); explode(p.clone(), s.spec.big); done = true; break; } }
-      if (!done) for (const c of crews) { if (!c.alive || c.team === s.team) continue;
+      if (!done) for (const c of crews) { if (!c.alive) continue; if (!s.ff && c.team === s.team) continue;
         if (p.distanceTo(c.group.position.clone().setY(0.9)) < 0.7) { hurtCrew(c, s.spec.crewDmg); if (s.spec.big) explode(p.clone()); done = true; break; } }
       if (done || s.life <= 0 || p.y < 0 || Math.abs(p.x) > BOUND + 15 || Math.abs(p.z) > BOUND + 15) {
         if (!done && s.spec.big) explode(p.clone());
@@ -946,6 +947,10 @@ export function startGame(config) {
     get controlled() { return controlled; }, get enemiesLeft() { return enemiesLeft; }, get alliesLeft() { return alliesLeft; },
     get gameOver() { return gameOver; }, get paused() { return paused; }, cycleControl,
     get camFocus() { return cam.focus.clone(); }, FIELD,
+    testShell(x, z, ff) { if (!controlled) return; const pos = controlled.group.position;
+      const dir = new THREE.Vector3(x - pos.x, 0, z - pos.z); if (dir.lengthSq() < 1e-6) return; dir.normalize();
+      const from = pos.clone().add(new THREE.Vector3(0, 1.35, 0)).addScaledVector(dir, 3.6);
+      fireProjectile(from, dir, controlled.team, "ap", controlled.dmg, controlled, ff); },
     killEnemy() { const e = enemyTanks.find((t) => t.alive); if (e) disableTank(e); },
   };
   window.__game = handle;

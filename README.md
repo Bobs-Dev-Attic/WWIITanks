@@ -61,6 +61,9 @@ The web build has since grown well beyond the MVP with these battlefield systems
 - **Terrain editor** — a setup **Terrain** tab to add your own buildings, ruins,
   trees, rocks, hedgehogs, and barbed wire anywhere on the field, on top of the
   location's generated terrain.
+- **Shoot anything** — a player-controlled tank's shells hit *anything* you aim
+  at: structures and terrain, and tanks/crew of **either side** (friendly fire).
+  AI shells still respect their own team.
 - **Large battlefield** — a wide play area (≈300×300 units) with denser terrain
   and multiple river bridges. The camera is clamped to the battlefield so you
   can't pan off into empty space, and zooms out far enough to survey the field.
