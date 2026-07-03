@@ -4,7 +4,7 @@
 // optionally fine-place them on the minimap), then launch. The top menu bar
 // lets the player re-open setup, restart, pause, view help, or leave.
 
-import { VERSION, LOCATIONS, WEATHER, TANK_TYPES, startGame } from "./game.js";
+import { VERSION, LOCATIONS, WEATHER, TANK_TYPES, FIELD, BRIDGE_XS, startGame } from "./game.js";
 
 document.getElementById("ver").textContent = "v" + VERSION;
 document.getElementById("mb-ver").textContent = "v" + VERSION;
@@ -36,7 +36,7 @@ for (const tab of document.querySelectorAll(".tab")) {
 
 // ---- deployment (per-type counts + minimap placement) ----------------------
 const TYPE_COLORS = { stuart: "#8fd06a", sherman: "#5f9e3a", pershing: "#3f6f28", panzer2: "#c9b08a", panzer4: "#9a8f72", tiger: "#6f6552" };
-const WORLD = 95, CAP = 14;
+const WORLD = FIELD, CAP = 14;
 const cl = (v) => Math.max(-WORLD, Math.min(WORLD, v));
 
 function makeDeployer(team, canvasId, palId, cntId, clrId, autoId, autoN) {
@@ -69,7 +69,7 @@ function makeDeployer(team, canvasId, palId, cntId, clrId, autoId, autoN) {
 
   function autoPos(key) {
     const c = countOf(key), col = c % 6, rowi = Math.floor(c / 6);
-    return { x: Math.round(-60 + col * 24), z: zoneAllies ? -30 - rowi * 8 : 40 + rowi * 8 };
+    return { x: Math.round(-90 + col * 36), z: zoneAllies ? -45 - rowi * 10 : 60 + rowi * 10 };
   }
   function addOne(key) { if (placed.length >= CAP) return; const p = autoPos(key); placed.push({ type: key, x: p.x, z: p.z }); refresh(); }
   function removeOne(key) { for (let i = placed.length - 1; i >= 0; i--) if (placed[i].type === key) { placed.splice(i, 1); break; } refresh(); }
@@ -88,7 +88,7 @@ function makeDeployer(team, canvasId, palId, cntId, clrId, autoId, autoN) {
     if (LOCATIONS[selLoc.value].river) {
       const y1 = w2py(18), y2 = w2py(6);
       ctx.fillStyle = "rgba(60,110,150,.5)"; ctx.fillRect(0, y1, size, y2 - y1);
-      ctx.fillStyle = "#6b4f32"; for (const bx of [-32, 26]) ctx.fillRect(w2px(bx) - 7, y1, 14, y2 - y1);
+      ctx.fillStyle = "#6b4f32"; for (const bx of BRIDGE_XS) ctx.fillRect(w2px(bx) - 6, y1, 12, y2 - y1);
     }
     ctx.strokeStyle = "rgba(255,255,255,.15)"; ctx.beginPath(); ctx.moveTo(0, size / 2); ctx.lineTo(size, size / 2); ctx.stroke();
     for (const t of placed) { ctx.fillStyle = TYPE_COLORS[t.type] || "#ccc"; ctx.fillRect(w2px(t.x) - 4, w2py(t.z) - 4, 8, 8); }
@@ -134,7 +134,7 @@ function makeTerrainEditor() {
     if (LOCATIONS[selLoc.value].river) {
       const y1 = w2py(18), y2 = w2py(6);
       ctx.fillStyle = "rgba(60,110,150,.5)"; ctx.fillRect(0, y1, size, y2 - y1);
-      ctx.fillStyle = "#6b4f32"; for (const bx of [-32, 26]) ctx.fillRect(w2px(bx) - 7, y1, 14, y2 - y1);
+      ctx.fillStyle = "#6b4f32"; for (const bx of BRIDGE_XS) ctx.fillRect(w2px(bx) - 6, y1, 12, y2 - y1);
     }
     ctx.strokeStyle = "rgba(255,255,255,.12)"; ctx.beginPath(); ctx.moveTo(0, size / 2); ctx.lineTo(size, size / 2); ctx.stroke();
     for (const p of props) { ctx.fillStyle = colorOf(p.type); ctx.fillRect(w2px(p.x) - 4, w2py(p.z) - 4, 8, 8); }

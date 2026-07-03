@@ -13,16 +13,23 @@
 
 import * as THREE from "three";
 
-export const VERSION = "0.5.0";
+export const VERSION = "0.6.0";
+
+// Half-extent of the playable battlefield (world units). Shared with the setup
+// minimaps so deployment coordinates line up with the in-game bounds.
+export const FIELD = 150;
+
+// X positions of the river bridges (shared so the setup minimap matches).
+export const BRIDGE_XS = [-95, -35, 35, 95];
 
 // ---------------------------------------------------------------------------
 // Configuration catalogues (shared with the setup UI)
 // ---------------------------------------------------------------------------
 export const LOCATIONS = {
-  normandy:      { name: "Normandy Bocage", ground: 0x56682f, trees: 18, rocks: 6, buildings: 5, ruins: 3, river: true },
-  ardennes:      { name: "Ardennes Forest", ground: 0x4a5a34, trees: 30, rocks: 8, buildings: 3, ruins: 2, river: false },
-  north_africa:  { name: "North Africa",    ground: 0xb9a05b, trees: 3, rocks: 16, buildings: 2, ruins: 5, river: false },
-  eastern_front: { name: "Eastern Front",   ground: 0x6d7440, trees: 10, rocks: 8, buildings: 4, ruins: 6, river: true },
+  normandy:      { name: "Normandy Bocage", ground: 0x56682f, trees: 34, rocks: 12, buildings: 9,  ruins: 5,  river: true },
+  ardennes:      { name: "Ardennes Forest", ground: 0x4a5a34, trees: 56, rocks: 14, buildings: 5,  ruins: 4,  river: false },
+  north_africa:  { name: "North Africa",    ground: 0xb9a05b, trees: 5,  rocks: 30, buildings: 4,  ruins: 9,  river: false },
+  eastern_front: { name: "Eastern Front",   ground: 0x6d7440, trees: 18, rocks: 14, buildings: 8,  ruins: 11, river: true },
 };
 
 export const WEATHER = {
@@ -96,11 +103,12 @@ export function startGame(config) {
   }
   scene.add(sun, sun.target);
 
-  const BOUND = 95;
+  const BOUND = FIELD;
+  const GSPAN = FIELD * 2 + 140; // ground overscan beyond the play area
   let groundColor = new THREE.Color(loc.ground);
   if (wx.snowGround) groundColor.lerp(new THREE.Color(0xdfe6ea), 0.6);
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(400, 400),
+    new THREE.PlaneGeometry(GSPAN, GSPAN),
     new THREE.MeshStandardMaterial({ color: groundColor, roughness: 1 })
   );
   ground.rotation.x = -Math.PI / 2;
@@ -276,16 +284,16 @@ export function startGame(config) {
 
   function makeRiverAndBridges() {
     river = { z0: 6, z1: 18 };
-    const water = new THREE.Mesh(new THREE.PlaneGeometry(400, river.z1 - river.z0),
+    const water = new THREE.Mesh(new THREE.PlaneGeometry(GSPAN, river.z1 - river.z0),
       new THREE.MeshStandardMaterial({ color: 0x2f5568, roughness: 0.3, metalness: 0.2, transparent: true, opacity: 0.9 }));
     water.rotation.x = -Math.PI / 2; water.position.set(0, -0.15, (river.z0 + river.z1) / 2);
     scene.add(water);
     // banks
     for (const bz of [river.z0, river.z1]) {
-      const bank = box(400, 0.4, 0.6, 0x5a4a30); bank.position.set(0, 0.1, bz); scene.add(bank);
+      const bank = box(GSPAN, 0.4, 0.6, 0x5a4a30); bank.position.set(0, 0.1, bz); scene.add(bank);
     }
-    for (const bx of [-32, 26]) {
-      const halfW = 5;
+    for (const bx of BRIDGE_XS) {
+      const halfW = 6;
       const deck = box(halfW * 2, 0.5, river.z1 - river.z0 + 1.5, 0x6b4f32);
       deck.position.set(bx, 0.35, (river.z0 + river.z1) / 2); scene.add(deck);
       for (const sx of [-halfW, halfW]) { const rail = box(0.3, 0.7, river.z1 - river.z0 + 1.5, 0x4a3722); rail.position.set(bx + sx, 0.7, (river.z0 + river.z1) / 2); scene.add(rail); }
@@ -366,23 +374,24 @@ export function startGame(config) {
     const placed = [];
     const tooClose = (x, z, d) => placed.some((p) => Math.hypot(p.x - x, p.z - z) < d) ||
       (inRiver({ x, z }) && !onBridge({ x, z }));
+    const R = BOUND - 8;
     const spot = (minGap) => {
-      for (let k = 0; k < 30; k++) { const x = rand(-88, 88), z = rand(-88, 88);
-        if (Math.abs(x) < 8 && z < -22 && z > -46) continue; // keep allied start clear
+      for (let k = 0; k < 40; k++) { const x = rand(-R, R), z = rand(-R, R);
+        if (Math.abs(x) < 10 && z < -30 && z > -70) continue; // keep allied start clear
         if (!tooClose(x, z, minGap)) { placed.push({ x, z }); return [x, z]; } }
       return null;
     };
     const put = (fn, gap) => { const s = spot(gap); if (s) fn(s[0], s[1]); };
-    for (let i = 0; i < loc.buildings; i++) put(makeBuilding, 14);
-    for (let i = 0; i < loc.ruins; i++) put(makeRuin, 10);
-    for (let i = 0; i < loc.trees; i++) put(makeTree, 6);
-    for (let i = 0; i < loc.rocks; i++) put(makeRock, 6);
+    for (let i = 0; i < loc.buildings; i++) put(makeBuilding, 16);
+    for (let i = 0; i < loc.ruins; i++) put(makeRuin, 12);
+    for (let i = 0; i < loc.trees; i++) put(makeTree, 7);
+    for (let i = 0; i < loc.rocks; i++) put(makeRock, 7);
     // anti-tank belt + wire near the river / mid-field
-    for (let i = 0; i < 10; i++) put(makeHedgehog, 4);
-    for (let i = 0; i < 6; i++) { const s = spot(8); if (s) makeWire(s[0], s[1], rand(6, 12), rand(0, 3.14)); }
+    for (let i = 0; i < 18; i++) put(makeHedgehog, 5);
+    for (let i = 0; i < 12; i++) { const s = spot(9); if (s) makeWire(s[0], s[1], rand(6, 12), rand(0, 3.14)); }
     // user-placed structures/objects (added on top of the generated terrain)
     for (const p of (config.props || [])) {
-      const x = clamp(p.x, -90, 90), z = clamp(p.z, -90, 90);
+      const x = clamp(p.x, -BOUND, BOUND), z = clamp(p.z, -BOUND, BOUND);
       if (p.type === "building") makeBuilding(x, z);
       else if (p.type === "ruin") makeRuin(x, z);
       else if (p.type === "tree") makeTree(x, z);
@@ -644,7 +653,7 @@ export function startGame(config) {
         if (p.distanceTo(t.group.position.clone().setY(1)) < t.radius + 0.5) { hitTank(t, s, p.clone()); explode(p.clone(), s.spec.big); done = true; break; } }
       if (!done) for (const c of crews) { if (!c.alive || c.team === s.team) continue;
         if (p.distanceTo(c.group.position.clone().setY(0.9)) < 0.7) { hurtCrew(c, s.spec.crewDmg); if (s.spec.big) explode(p.clone()); done = true; break; } }
-      if (done || s.life <= 0 || p.y < 0 || Math.abs(p.x) > 110 || Math.abs(p.z) > 110) {
+      if (done || s.life <= 0 || p.y < 0 || Math.abs(p.x) > BOUND + 15 || Math.abs(p.z) > BOUND + 15) {
         if (!done && s.spec.big) explode(p.clone());
         scene.remove(s.mesh); projectiles.splice(i, 1);
       }
@@ -718,14 +727,19 @@ export function startGame(config) {
   // ===========================================================================
   const cam = { azimuth: Math.PI / 4, pitch: deg(35.264), distance: 160, size: 42,
     focus: controlled ? controlled.group.position.clone() : new THREE.Vector3(), pan: new THREE.Vector3(), shake: 0 };
-  const MIN_SIZE = 12, MAX_SIZE = 80;
+  const MIN_SIZE = 12, MAX_SIZE = 130;
   function updateCamera(dt) {
     const kx = (keys["arrowright"] ? 1 : 0) - (keys["arrowleft"] ? 1 : 0);
     const kz = (keys["arrowup"] ? 1 : 0) - (keys["arrowdown"] ? 1 : 0);
     if (kx || kz) { const right = new THREE.Vector3(Math.cos(cam.azimuth), 0, -Math.sin(cam.azimuth)), fwd = new THREE.Vector3(Math.sin(cam.azimuth), 0, Math.cos(cam.azimuth));
-      cam.pan.addScaledVector(right, kx * 42 * dt).addScaledVector(fwd, kz * 42 * dt); }
-    const anchor = controlled ? controlled.group.position : cam.focus;
-    cam.focus.lerp(anchor.clone().add(cam.pan), 1 - Math.pow(0.0015, dt));
+      cam.pan.addScaledVector(right, kx * 90 * dt).addScaledVector(fwd, kz * 90 * dt); }
+    // keep the camera focus over the battlefield — clamp so you can't pan into the void
+    const anchor = controlled ? controlled.group.position.clone() : cam.focus.clone();
+    const LIMIT = BOUND + 12;
+    const desired = anchor.clone().add(cam.pan);
+    desired.x = clamp(desired.x, -LIMIT, LIMIT); desired.z = clamp(desired.z, -LIMIT, LIMIT); desired.y = 0;
+    cam.pan.set(desired.x - anchor.x, 0, desired.z - anchor.z); // absorb the clamp so pan can't run away past the edge
+    cam.focus.lerp(desired, 1 - Math.pow(0.0015, dt));
     const dir = new THREE.Vector3(Math.cos(cam.pitch) * Math.sin(cam.azimuth), Math.sin(cam.pitch), Math.cos(cam.pitch) * Math.cos(cam.azimuth));
     const eye = cam.focus.clone().addScaledVector(dir, cam.distance);
     if (cam.shake > 0.001) { cam.shake *= Math.pow(0.02, dt); eye.add(new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).multiplyScalar(cam.shake)); }
@@ -931,6 +945,7 @@ export function startGame(config) {
     tanks, crews, obstacles, projectiles, grenades, debris, bridges,
     get controlled() { return controlled; }, get enemiesLeft() { return enemiesLeft; }, get alliesLeft() { return alliesLeft; },
     get gameOver() { return gameOver; }, get paused() { return paused; }, cycleControl,
+    get camFocus() { return cam.focus.clone(); }, FIELD,
     killEnemy() { const e = enemyTanks.find((t) => t.alive); if (e) disableTank(e); },
   };
   window.__game = handle;
