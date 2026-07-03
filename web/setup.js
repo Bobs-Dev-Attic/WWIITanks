@@ -17,11 +17,13 @@ for (const [k, v] of Object.entries(WEATHER)) selWx.add(new Option(v.name, k));
 selLoc.value = "normandy"; selWx.value = "clear";
 
 const locDesc = document.getElementById("loc-desc");
+let battleNote = "";
 function describe() {
   const L = LOCATIONS[selLoc.value], W = WEATHER[selWx.value];
   locDesc.innerHTML =
     `<b>${L.name}</b> — ${L.river ? "a river cuts the field; cross at the bridges. " : ""}` +
-    `${L.buildings} buildings, ${L.ruins} ruins, ${L.trees} trees, ${L.rocks} rocks, plus barbed wire and anti-tank hedgehogs.<br><br><b>${W.name}</b> weather.`;
+    `${L.buildings} buildings, ${L.ruins} ruins, ${L.trees} trees, ${L.rocks} rocks, plus barbed wire and anti-tank hedgehogs.<br><br><b>${W.name}</b> weather.` +
+    (battleNote ? `<br><br><i style="opacity:.85">${battleNote}</i>` : "");
 }
 selLoc.onchange = selWx.onchange = describe;
 describe();
@@ -161,6 +163,70 @@ function makeTerrainEditor() {
 }
 const terrainEd = makeTerrainEditor();
 
+// ---- historical battles ----------------------------------------------------
+// Approximated with the game's US-vs-German low-poly roster; Eastern-Front
+// Soviet forces are represented by the "Allied" tanks.
+const BATTLES = {
+  villers_bocage: { name: "Villers-Bocage (1944)", location: "normandy", weather: "clear",
+    allies: [["sherman", 8], ["stuart", 3]], axis: [["tiger", 2], ["panzer4", 2]], sup: { a: [1, 1], x: [0, 0] },
+    desc: "13 Jun 1944 — Wittmann's Tigers ambush a strung-out British armoured column in the Normandy bocage: a few heavies maul a much larger force." },
+  goodwood: { name: "Operation Goodwood (1944)", location: "normandy", weather: "overcast",
+    allies: [["sherman", 9], ["stuart", 3]], axis: [["panzer4", 4], ["tiger", 3]], sup: { a: [2, 2], x: [1, 0] },
+    desc: "18 Jul 1944 — massed Allied armour pushes out of the Normandy beachhead into layered German anti-tank defences." },
+  arracourt: { name: "Arracourt (1944)", location: "eastern_front", weather: "fog",
+    allies: [["sherman", 10], ["stuart", 2]], axis: [["tiger", 3], ["panzer4", 4]], sup: { a: [2, 1], x: [1, 0] },
+    desc: "Sep 1944 — in Lorraine fog, outgunned US Shermans use maneuver and flanking to defeat German Panther brigades." },
+  bulge: { name: "Battle of the Bulge (1944)", location: "ardennes", weather: "snow",
+    allies: [["sherman", 6], ["pershing", 2], ["stuart", 2]], axis: [["panzer4", 5], ["tiger", 4]], sup: { a: [1, 0], x: [2, 1] },
+    desc: "Dec 1944 — German armour attacks through the snowbound Ardennes forest; foul weather grounds Allied airpower." },
+  el_alamein: { name: "El Alamein (1942)", location: "north_africa", weather: "clear",
+    allies: [["sherman", 8], ["stuart", 4]], axis: [["panzer4", 5], ["panzer2", 3]], sup: { a: [2, 2], x: [1, 0] },
+    desc: "Oct 1942 — the desert turning point: a large, well-supplied Allied force grinds down Rommel's Afrika Korps armour." },
+  kasserine: { name: "Kasserine Pass (1943)", location: "north_africa", weather: "clear",
+    allies: [["stuart", 6], ["sherman", 4]], axis: [["panzer4", 5], ["tiger", 2]], sup: { a: [1, 0], x: [1, 1] },
+    desc: "Feb 1943 — green US units meet veteran German armour (and the first Tigers) in the Tunisian passes." },
+  prokhorovka: { name: "Prokhorovka / Kursk (1943)", location: "eastern_front", weather: "overcast",
+    allies: [["sherman", 10], ["stuart", 4]], axis: [["panzer4", 6], ["tiger", 5]], sup: { a: [2, 1], x: [2, 1] },
+    desc: "12 Jul 1943 — one of history's largest tank clashes: massed Soviet armour charges into German Panzer and Tiger formations." },
+  brody: { name: "Battle of Brody (1941)", location: "eastern_front", weather: "clear",
+    allies: [["sherman", 12], ["stuart", 2]], axis: [["panzer2", 6], ["panzer4", 5]], sup: { a: [0, 0], x: [1, 2] },
+    desc: "Jun 1941 — huge but disorganised Soviet armour counterattacks German spearheads under total Luftwaffe air superiority." },
+};
+
+const selBattle = document.getElementById("sel-battle");
+selBattle.add(new Option("Custom Battle", "custom"));
+for (const [k, v] of Object.entries(BATTLES)) selBattle.add(new Option(v.name, k));
+selBattle.value = "custom";
+
+const setSup = (a) => { document.getElementById(supSel.aArty).value = a.a[0]; document.getElementById(supSel.aAir).value = a.a[1];
+  document.getElementById(supSel.xArty).value = a.x[0]; document.getElementById(supSel.xAir).value = a.x[1]; };
+const fillRoster = (dep, list) => { dep.placed.length = 0; for (const [type, n] of list) for (let i = 0; i < n; i++) dep.addOne(type); };
+
+function applyBattle(key) {
+  const bt = BATTLES[key]; if (!bt) return;
+  selLoc.value = bt.location; selWx.value = bt.weather; setSup(bt.sup);
+  fillRoster(alliesDep, bt.allies); fillRoster(axisDep, bt.axis);
+  battleNote = bt.desc;
+  selLoc.dispatchEvent(new Event("change")); selWx.dispatchEvent(new Event("change")); describe();
+}
+selBattle.onchange = () => { if (selBattle.value !== "custom") applyBattle(selBattle.value); else { battleNote = ""; describe(); } };
+
+// ---- randomize everything --------------------------------------------------
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+function randomize() {
+  selBattle.value = "custom"; battleNote = "";
+  selLoc.value = pick(Object.keys(LOCATIONS));
+  selWx.value = pick(Object.keys(WEATHER));
+  for (const id of Object.values(supSel)) document.getElementById(id).value = String(Math.floor(Math.random() * 4));
+  const aKeys = Object.keys(TANK_TYPES.allies), xKeys = Object.keys(TANK_TYPES.germans);
+  fillRoster(alliesDep, [[pick(aKeys), 2 + Math.floor(Math.random() * 6)], [pick(aKeys), 1 + Math.floor(Math.random() * 4)]]);
+  fillRoster(axisDep, [[pick(xKeys), 2 + Math.floor(Math.random() * 6)], [pick(xKeys), 1 + Math.floor(Math.random() * 4)]]);
+  // a few random extra structures/objects
+  terrainEd.props.length = 0;
+  selLoc.dispatchEvent(new Event("change")); selWx.dispatchEvent(new Event("change")); describe();
+}
+document.getElementById("randomize").onclick = randomize;
+
 function summary() {
   document.getElementById("foot-summary").textContent =
     `${LOCATIONS[selLoc.value].name} · ${WEATHER[selWx.value].name} · Allies ${alliesDep.count()} vs Axis ${axisDep.count()} (max ${CAP}/side)`;
@@ -222,6 +288,8 @@ window.__setup = {
   start: startBattle, leave: leaveToSetup, restart,
   pause: () => { if (gameHandle) gameHandle.togglePause(); syncPause(); return gameHandle && gameHandle.paused; },
   allies: alliesDep, axis: axisDep, terrain: terrainEd,
+  battles: Object.keys(BATTLES), applyBattle, randomize,
+  buildConfig, get battleSel() { return selBattle.value; },
   setLocation: (l) => { selLoc.value = l; describe(); }, setWeather: (w) => { selWx.value = w; },
   get handle() { return gameHandle; },
 };

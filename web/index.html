@@ -18,7 +18,10 @@
     .card { width: min(880px, 96vw); background: var(--panel); border: 1px solid var(--edge); border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,.6); overflow: hidden; }
     .head { display: flex; align-items: baseline; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--edge); background: linear-gradient(#20261e,#171b16); }
     .head h1 { font-size: 22px; letter-spacing: 3px; color: var(--accent); }
+    .head .right { display: flex; align-items: center; gap: 14px; }
     .head .ver { font-size: 12px; opacity: .7; }
+    .hbtn { padding: 8px 13px; border: 1px solid var(--edge); border-radius: 6px; background: #1a1f16; color: var(--ink); cursor: pointer; font: inherit; font-size: 12.5px; letter-spacing: .5px; }
+    .hbtn:hover { border-color: var(--accent); color: var(--accent); }
     .tabs { display: flex; gap: 2px; padding: 10px 14px 0; }
     .tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; border: 1px solid var(--edge); border-bottom: none;
       border-radius: 8px 8px 0 0; background: #12160f; opacity: .7; letter-spacing: 1px; font-size: 13px; user-select: none; }
@@ -89,7 +92,13 @@
   <!-- ===== Setup screen ===== -->
   <div id="setup">
     <div class="card">
-      <div class="head"><h1>WWII&nbsp;TANKS</h1><div class="ver" id="ver">v0.0.0</div></div>
+      <div class="head">
+        <h1>WWII&nbsp;TANKS</h1>
+        <div class="right">
+          <div class="ver" id="ver">v0.0.0</div>
+          <button class="hbtn" id="randomize" title="Randomize all settings">🎲 Randomize</button>
+        </div>
+      </div>
       <div class="tabs">
         <div class="tab active" data-tab="battlefield">BATTLEFIELD</div>
         <div class="tab" data-tab="allies">ALLIES</div>
@@ -100,6 +109,7 @@
       <div class="panel active" data-panel="battlefield">
         <div class="row">
           <div>
+            <label class="field"><span>HISTORICAL BATTLE</span><select id="sel-battle"></select></label>
             <label class="field"><span>LOCATION</span><select id="sel-location"></select></label>
             <label class="field"><span>WEATHER</span><select id="sel-weather"></select></label>
           </div>
