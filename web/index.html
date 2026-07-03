@@ -34,10 +34,16 @@
     .help { margin-top: 14px; font-size: 12px; line-height: 1.7; opacity: .7; border-top: 1px dashed var(--edge); padding-top: 12px; }
     .help b { color: var(--accent); }
 
-    .palette { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-    .chip { padding: 8px 11px; border: 1px solid var(--edge); border-radius: 6px; background: #10140d; cursor: pointer; font-size: 12.5px; }
-    .chip.sel { outline: 2px solid var(--accent); color: var(--accent); }
-    .chip small { opacity: .6; }
+    .palette { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .urow { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--edge); border-radius: 6px; background: #10140d; cursor: pointer; }
+    .urow.sel { outline: 2px solid var(--accent); }
+    .urow .uname { min-width: 168px; font-size: 13px; }
+    .urow .ustat { flex: 1; font-size: 11px; opacity: .6; }
+    .urow .ustep { display: flex; align-items: center; gap: 8px; }
+    .urow .ustep button { width: 26px; height: 26px; border: 1px solid var(--edge); background: #12160f; color: var(--ink); border-radius: 5px; cursor: pointer; font-size: 15px; line-height: 1; }
+    .urow .ustep button:hover { border-color: var(--accent); color: var(--accent); }
+    .urow .ucount { min-width: 22px; text-align: center; color: var(--accent); font-weight: 700; }
+    .caphint { font-size: 11px; opacity: .6; margin-bottom: 6px; }
     .mapwrap { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
     .mini { border: 1px solid var(--edge); border-radius: 8px; background: #0e120b; cursor: crosshair; touch-action: none; }
     .mapside { font-size: 12px; line-height: 1.7; opacity: .85; max-width: 300px; }
@@ -48,12 +54,28 @@
     .start { padding: 12px 26px; font-size: 15px; letter-spacing: 2px; color: #10140d; background: linear-gradient(#ffe08a,#e0a12a); border: none; border-radius: 7px; cursor: pointer; font-weight: 700; }
     .zone-allies { color: var(--allies); } .zone-axis { color: var(--axis); }
 
+    /* ---------- Top menu bar ---------- */
+    #menubar { position: fixed; top: 0; left: 0; right: 0; height: 40px; display: none; align-items: center; gap: 6px;
+      padding: 0 12px; background: rgba(15,18,14,.94); border-bottom: 1px solid var(--edge); z-index: 16; }
+    #menubar .mb-title { color: var(--accent); letter-spacing: 2px; font-size: 13px; margin-right: 10px; }
+    #menubar button { background: #1a1f16; color: var(--ink); border: 1px solid var(--edge); border-radius: 5px; padding: 6px 11px; font: inherit; font-size: 12px; cursor: pointer; letter-spacing: .5px; }
+    #menubar button:hover { border-color: var(--accent); color: var(--accent); }
+    #menubar .mb-ver { margin-left: auto; opacity: .6; font-size: 11px; }
+
+    /* ---------- Help overlay ---------- */
+    #help { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(6,8,6,.72); z-index: 18; }
+    #help .box { width: min(560px, 92vw); background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 22px 26px; }
+    #help h2 { color: var(--accent); letter-spacing: 2px; margin-bottom: 12px; }
+    #help ul { list-style: none; font-size: 13px; line-height: 1.9; }
+    #help b { color: var(--accent); }
+    #help .btn { margin-top: 16px; padding: 9px 14px; border: 1px solid var(--edge); border-radius: 6px; background: #12160f; color: var(--ink); cursor: pointer; }
+
     /* ---------- In-game HUD ---------- */
     #hud { position: fixed; inset: 0; pointer-events: none; color: var(--ink); text-shadow: 0 1px 2px rgba(0,0,0,.85); user-select: none; display: none; }
-    #controls { position: absolute; top: 16px; left: 18px; font-size: 13px; line-height: 1.5; opacity: .9; }
+    #controls { position: absolute; top: 56px; left: 18px; font-size: 13px; line-height: 1.5; opacity: .9; }
     #controls b { color: var(--accent); letter-spacing: 1px; }
-    #status { position: absolute; top: 122px; left: 18px; font-size: 16px; font-weight: 700; letter-spacing: .5px; }
-    #hpbar { position: absolute; top: 152px; left: 18px; width: 240px; height: 14px; border: 1px solid rgba(255,255,255,.35); border-radius: 3px; overflow: hidden; background: rgba(0,0,0,.35); }
+    #status { position: absolute; top: 160px; left: 18px; font-size: 16px; font-weight: 700; letter-spacing: .5px; }
+    #hpbar { position: absolute; top: 190px; left: 18px; width: 240px; height: 14px; border: 1px solid rgba(255,255,255,.35); border-radius: 3px; overflow: hidden; background: rgba(0,0,0,.35); }
     #hpfill { height: 100%; width: 100%; background: linear-gradient(90deg,#7ac74f,#b6e36a); transition: width .12s linear; }
     #banner { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 60px; font-weight: 800; letter-spacing: 4px; opacity: 0; transition: opacity .35s ease; text-align: center; }
     #banner small { display: block; font-size: 17px; font-weight: 600; letter-spacing: 1px; opacity: .85; margin-top: 10px; }
@@ -114,6 +136,32 @@
         <div style="font-size:12px;opacity:.65" id="foot-summary"></div>
         <button class="start" id="start">START BATTLE ▸</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ===== Top menu bar (in-game) ===== -->
+  <div id="menubar">
+    <span class="mb-title">WWII TANKS</span>
+    <button data-act="setup">⚙ Setup Battle</button>
+    <button data-act="restart">↻ Restart</button>
+    <button data-act="pause">⏸ Pause</button>
+    <button data-act="help">❔ Help</button>
+    <button data-act="leave">⨯ Leave</button>
+    <span class="mb-ver" id="mb-ver"></span>
+  </div>
+
+  <!-- ===== Help overlay ===== -->
+  <div id="help">
+    <div class="box">
+      <h2>CONTROLS</h2>
+      <ul>
+        <li><b>W / S</b> — drive forward / reverse &nbsp; <b>A / D</b> — steer</li>
+        <li><b>Mouse</b> — aim turret &nbsp; <b>Left click / Space</b> — fire</li>
+        <li><b>Tab</b> — take command of the next friendly tank (<b>Shift+Tab</b> previous)</li>
+        <li><b>Right-drag</b> — orbit camera &nbsp; <b>Middle-drag / arrows</b> — pan &nbsp; <b>Wheel</b> — zoom</li>
+        <li>Cross <b>rivers</b> only at bridges · shells punch through cover · disabled crews bail out and fight on</li>
+      </ul>
+      <button class="btn" data-act="closehelp">CLOSE</button>
     </div>
   </div>
 

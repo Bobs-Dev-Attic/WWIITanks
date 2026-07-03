@@ -1,25 +1,27 @@
-// Setup screen: pick battlefield + weather, deploy both tank rosters on
-// minimaps, then launch the match with startGame(config).
+// Setup screen + in-game menu bar.
+//
+// Pick battlefield + weather, set the COUNT of each tank type per faction (and
+// optionally fine-place them on the minimap), then launch. The top menu bar
+// lets the player re-open setup, restart, pause, view help, or leave.
 
 import { VERSION, LOCATIONS, WEATHER, TANK_TYPES, startGame } from "./game.js";
 
 document.getElementById("ver").textContent = "v" + VERSION;
+document.getElementById("mb-ver").textContent = "v" + VERSION;
 
-// ---- populate selects ------------------------------------------------------
+// ---- selects ---------------------------------------------------------------
 const selLoc = document.getElementById("sel-location");
 const selWx = document.getElementById("sel-weather");
 for (const [k, v] of Object.entries(LOCATIONS)) selLoc.add(new Option(v.name, k));
 for (const [k, v] of Object.entries(WEATHER)) selWx.add(new Option(v.name, k));
-selLoc.value = "normandy";
-selWx.value = "clear";
+selLoc.value = "normandy"; selWx.value = "clear";
 
 const locDesc = document.getElementById("loc-desc");
 function describe() {
   const L = LOCATIONS[selLoc.value], W = WEATHER[selWx.value];
   locDesc.innerHTML =
     `<b>${L.name}</b> — ${L.river ? "a river cuts the field; cross at the bridges. " : ""}` +
-    `${L.buildings} buildings, ${L.ruins} ruins, ${L.trees} trees, ${L.rocks} rocks, plus barbed wire and anti-tank hedgehogs.<br><br>` +
-    `<b>${W.name}</b> weather.`;
+    `${L.buildings} buildings, ${L.ruins} ruins, ${L.trees} trees, ${L.rocks} rocks, plus barbed wire and anti-tank hedgehogs.<br><br><b>${W.name}</b> weather.`;
 }
 selLoc.onchange = selWx.onchange = describe;
 describe();
@@ -32,95 +34,80 @@ for (const tab of document.querySelectorAll(".tab")) {
   };
 }
 
-// ---- minimap deployment ----------------------------------------------------
+// ---- deployment (per-type counts + minimap placement) ----------------------
 const TYPE_COLORS = { stuart: "#8fd06a", sherman: "#5f9e3a", pershing: "#3f6f28", panzer2: "#c9b08a", panzer4: "#9a8f72", tiger: "#6f6552" };
-const WORLD = 95; // half-extent
+const WORLD = 95, CAP = 14;
+const cl = (v) => Math.max(-WORLD, Math.min(WORLD, v));
 
 function makeDeployer(team, canvasId, palId, cntId, clrId, autoId, autoN) {
-  const canvas = document.getElementById(canvasId);
-  const ctx = canvas.getContext("2d");
-  const size = canvas.width;
+  const canvas = document.getElementById(canvasId), ctx = canvas.getContext("2d"), size = canvas.width;
   const types = Object.entries(TANK_TYPES[team]);
+  const zoneAllies = team === "allies";
   let selType = types[0][0];
   const placed = [];
+  const rowEls = {};
 
-  // south (allies) uses lower half (z<0 -> bottom of canvas); axis upper half
-  const zoneAllies = team === "allies";
-
-  // palette chips
   const pal = document.getElementById(palId);
   types.forEach(([key, spec], i) => {
-    const chip = document.createElement("div");
-    chip.className = "chip" + (i === 0 ? " sel" : "");
-    chip.innerHTML = `${spec.name}<br><small>HP ${spec.health} · RLD ${spec.reload}s · SPD ${spec.maxFwd}</small>`;
-    chip.onclick = () => { selType = key; pal.querySelectorAll(".chip").forEach((c) => c.classList.remove("sel")); chip.classList.add("sel"); };
-    pal.appendChild(chip);
+    const row = document.createElement("div");
+    row.className = "urow" + (i === 0 ? " sel" : ""); row.dataset.type = key;
+    const name = document.createElement("span"); name.className = "uname"; name.textContent = spec.name;
+    const stat = document.createElement("span"); stat.className = "ustat"; stat.textContent = `HP ${spec.health} · RLD ${spec.reload}s · SPD ${spec.maxFwd} · DMG ${spec.dmg}`;
+    const step = document.createElement("span"); step.className = "ustep";
+    const minus = document.createElement("button"); minus.textContent = "−";
+    const cnt = document.createElement("b"); cnt.className = "ucount"; cnt.textContent = "0";
+    const plus = document.createElement("button"); plus.textContent = "+";
+    step.append(minus, cnt, plus); row.append(name, stat, step); pal.appendChild(row);
+    row.onclick = (e) => { if (e.target === minus || e.target === plus) return; select(key); };
+    minus.onclick = (e) => { e.stopPropagation(); removeOne(key); };
+    plus.onclick = (e) => { e.stopPropagation(); addOne(key); select(key); };
+    rowEls[key] = { row, cnt };
   });
+  function select(key) { selType = key; for (const k in rowEls) rowEls[k].row.classList.toggle("sel", k === key); }
+  const countOf = (key) => placed.filter((p) => p.type === key).length;
+  function refresh() { for (const k in rowEls) rowEls[k].cnt.textContent = countOf(k); document.getElementById(cntId).textContent = placed.length; draw(); }
 
-  const worldToPx = (x) => (x / WORLD * 0.5 + 0.5) * size;
-  const worldToPy = (z) => (0.5 - z / WORLD * 0.5) * size; // +z up
-  const pxToWorldX = (px) => (px / size - 0.5) * 2 * WORLD;
-  const pyToWorldZ = (py) => (0.5 - py / size) * 2 * WORLD;
+  function autoPos(key) {
+    const c = countOf(key), col = c % 6, rowi = Math.floor(c / 6);
+    return { x: Math.round(-60 + col * 24), z: zoneAllies ? -30 - rowi * 8 : 40 + rowi * 8 };
+  }
+  function addOne(key) { if (placed.length >= CAP) return; const p = autoPos(key); placed.push({ type: key, x: p.x, z: p.z }); refresh(); }
+  function removeOne(key) { for (let i = placed.length - 1; i >= 0; i--) if (placed[i].type === key) { placed.splice(i, 1); break; } refresh(); }
+
+  const w2px = (x) => (x / WORLD * 0.5 + 0.5) * size;
+  const w2py = (z) => (0.5 - z / WORLD * 0.5) * size;
+  const px2x = (px) => (px / size - 0.5) * 2 * WORLD;
+  const py2z = (py) => (0.5 - py / size) * 2 * WORLD;
+  const inZone = (z) => (zoneAllies ? z < -6 : z > 6);
 
   function draw() {
     ctx.clearRect(0, 0, size, size);
-    // ground
     ctx.fillStyle = "#141a10"; ctx.fillRect(0, 0, size, size);
-    // deployment zone highlight
     ctx.fillStyle = zoneAllies ? "rgba(122,199,79,.12)" : "rgba(201,138,138,.12)";
-    if (zoneAllies) ctx.fillRect(0, size * 0.55, size, size * 0.45);
-    else ctx.fillRect(0, 0, size, size * 0.45);
-    // river band (if location has one) around z 6..18 -> screen
+    if (zoneAllies) ctx.fillRect(0, size * 0.55, size, size * 0.45); else ctx.fillRect(0, 0, size, size * 0.45);
     if (LOCATIONS[selLoc.value].river) {
-      const y1 = worldToPy(18), y2 = worldToPy(6);
+      const y1 = w2py(18), y2 = w2py(6);
       ctx.fillStyle = "rgba(60,110,150,.5)"; ctx.fillRect(0, y1, size, y2 - y1);
-      // bridges at x=-32,26
-      ctx.fillStyle = "#6b4f32";
-      for (const bx of [-32, 26]) ctx.fillRect(worldToPx(bx) - 7, y1, 14, y2 - y1);
+      ctx.fillStyle = "#6b4f32"; for (const bx of [-32, 26]) ctx.fillRect(w2px(bx) - 7, y1, 14, y2 - y1);
     }
-    // center line
     ctx.strokeStyle = "rgba(255,255,255,.15)"; ctx.beginPath(); ctx.moveTo(0, size / 2); ctx.lineTo(size, size / 2); ctx.stroke();
-    // placed tanks
-    for (const t of placed) {
-      ctx.fillStyle = TYPE_COLORS[t.type] || "#ccc";
-      ctx.fillRect(worldToPx(t.x) - 4, worldToPy(t.z) - 4, 8, 8);
-    }
-    document.getElementById(cntId).textContent = placed.length;
-  }
-
-  function inZone(z) { return zoneAllies ? z < -6 : z > 6; }
-
-  function addAt(px, py) {
-    const x = Math.max(-WORLD, Math.min(WORLD, pxToWorldX(px)));
-    let z = Math.max(-WORLD, Math.min(WORLD, pyToWorldZ(py)));
-    if (!inZone(z)) z = zoneAllies ? -12 : 12;
-    placed.push({ type: selType, x: Math.round(x), z: Math.round(z) });
-    draw();
+    for (const t of placed) { ctx.fillStyle = TYPE_COLORS[t.type] || "#ccc"; ctx.fillRect(w2px(t.x) - 4, w2py(t.z) - 4, 8, 8); }
   }
 
   canvas.addEventListener("pointerdown", (e) => {
+    if (placed.length >= CAP) return;
     const r = canvas.getBoundingClientRect();
-    addAt(e.clientX - r.left, e.clientY - r.top);
+    const x = cl(px2x(e.clientX - r.left)); let z = cl(py2z(e.clientY - r.top));
+    if (!inZone(z)) z = zoneAllies ? -12 : 12;
+    placed.push({ type: selType, x: Math.round(x), z: Math.round(z) }); refresh();
   });
-  document.getElementById(clrId).onclick = () => { placed.length = 0; draw(); };
-  document.getElementById(autoId).onclick = () => { placed.length = 0; autofill(autoN); draw(); };
+  document.getElementById(clrId).onclick = () => { placed.length = 0; refresh(); };
+  document.getElementById(autoId).onclick = () => { placed.length = 0; autofill(autoN); refresh(); };
+  function autofill(n) { const keys = types.map(([k]) => k); for (let i = 0; i < n; i++) { const key = keys[i % keys.length]; const p = autoPos(key); placed.push({ type: key, x: p.x, z: p.z }); } }
 
-  function autofill(n) {
-    const keys = types.map(([k]) => k);
-    for (let i = 0; i < n; i++) {
-      const type = keys[i % keys.length];
-      const x = -40 + (i / Math.max(1, n - 1)) * 80;
-      const z = zoneAllies ? -34 + (i % 2) * -8 : 40 + (i % 2) * 8;
-      placed.push({ type, x: Math.round(x), z });
-    }
-  }
-
-  // seed a sensible default
-  autofill(autoN); draw();
-  // redraw when the river toggles with location
+  autofill(autoN); refresh();
   selLoc.addEventListener("change", draw);
-
-  return { placed };
+  return { placed, addOne, removeOne, count: () => placed.length };
 }
 
 const alliesDep = makeDeployer("allies", "map-allies", "pal-allies", "cnt-allies", "clr-allies", "auto-allies", 4);
@@ -128,23 +115,62 @@ const axisDep = makeDeployer("germans", "map-axis", "pal-axis", "cnt-axis", "clr
 
 function summary() {
   document.getElementById("foot-summary").textContent =
-    `${LOCATIONS[selLoc.value].name} · ${WEATHER[selWx.value].name} · Allies ${alliesDep.placed.length} vs Axis ${axisDep.placed.length}`;
+    `${LOCATIONS[selLoc.value].name} · ${WEATHER[selWx.value].name} · Allies ${alliesDep.count()} vs Axis ${axisDep.count()} (max ${CAP}/side)`;
 }
 setInterval(summary, 300); summary();
 
-// ---- launch ----------------------------------------------------------------
-document.getElementById("start").onclick = () => {
-  const config = {
-    location: selLoc.value,
-    weather: selWx.value,
-    allies: { tanks: alliesDep.placed.slice() },
-    axis: { tanks: axisDep.placed.slice() },
-  };
-  document.getElementById("setup").style.display = "none";
-  document.getElementById("hud").style.display = "block";
-  startGame(config);
-};
+// ---- lifecycle + menu bar --------------------------------------------------
+let gameHandle = null, lastConfig = null;
+const $ = (id) => document.getElementById(id);
+
+function buildConfig() {
+  return { location: selLoc.value, weather: selWx.value,
+    allies: { tanks: alliesDep.placed.slice() }, axis: { tanks: axisDep.placed.slice() } };
+}
+function show(setupVisible) {
+  $("setup").style.display = setupVisible ? "flex" : "none";
+  $("hud").style.display = setupVisible ? "none" : "block";
+  $("menubar").style.display = setupVisible ? "none" : "flex";
+  if (setupVisible) $("help").style.display = "none";
+}
+function startBattle() {
+  lastConfig = buildConfig();
+  show(false);
+  gameHandle = startGame(lastConfig);
+  syncPause();
+}
+function leaveToSetup() { if (gameHandle) { gameHandle.dispose(); gameHandle = null; } show(true); }
+function restart() {
+  if (gameHandle) gameHandle.dispose();
+  $("help").style.display = "none";
+  gameHandle = startGame(lastConfig || buildConfig());
+  syncPause();
+}
+function syncPause() {
+  const btn = [...document.querySelectorAll("#menubar button")].find((b) => b.dataset.act === "pause");
+  const p = !!(gameHandle && gameHandle.paused);
+  if (btn) btn.textContent = p ? "▶ Resume" : "⏸ Pause";
+  $("app").style.opacity = p ? 0.6 : 1;
+}
+
+$("start").onclick = startBattle;
+$("menubar").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  const act = b.dataset.act;
+  if (act === "setup" || act === "leave") leaveToSetup();
+  else if (act === "restart") restart();
+  else if (act === "pause") { if (gameHandle) gameHandle.togglePause(); syncPause(); }
+  else if (act === "help") { $("help").style.display = $("help").style.display === "flex" ? "none" : "flex"; }
+});
+$("help").addEventListener("click", (e) => {
+  if (e.target.id === "help" || e.target.closest('[data-act="closehelp"]')) $("help").style.display = "none";
+});
 
 // expose for smoke tests
-window.__setup = { start: () => document.getElementById("start").click(),
-  setLocation: (l) => { selLoc.value = l; describe(); }, setWeather: (w) => { selWx.value = w; } };
+window.__setup = {
+  start: startBattle, leave: leaveToSetup, restart,
+  pause: () => { if (gameHandle) gameHandle.togglePause(); syncPause(); return gameHandle && gameHandle.paused; },
+  allies: alliesDep, axis: axisDep,
+  setLocation: (l) => { selLoc.value = l; describe(); }, setWeather: (w) => { selWx.value = w; },
+  get handle() { return gameHandle; },
+};
