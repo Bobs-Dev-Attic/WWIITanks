@@ -61,6 +61,14 @@ The web build has since grown well beyond the MVP with these battlefield systems
 - **Terrain editor** — a setup **Terrain** tab to add your own buildings, ruins,
   trees, rocks, hedgehogs, and barbed wire anywhere on the field, on top of the
   location's generated terrain.
+- **Atmosphere & effects** — damaged buildings **smoke**, destroyed structures
+  and knocked-out tanks **burn** with fire and rising smoke, and **dust blows**
+  across the field (kicked up by moving tanks; heaviest in the desert).
+- **Machine guns** — hold **F** for the coaxial MG (rapid, low-damage,
+  anti-infantry); AI tanks rake nearby enemy infantry with theirs.
+- **Smoke grenades** — press **G** to lob a smoke screen; bailed crews pop smoke
+  to cover their retreat. Smoke actually **blocks AI line-of-sight**, so gunners
+  can't fire through it.
 - **Shoot anything** — a player-controlled tank's shells hit *anything* you aim
   at: structures and terrain, and tanks/crew of **either side** (friendly fire).
   AI shells still respect their own team.

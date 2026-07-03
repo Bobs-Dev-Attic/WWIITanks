@@ -13,7 +13,7 @@
 
 import * as THREE from "three";
 
-export const VERSION = "0.6.1";
+export const VERSION = "0.7.0";
 
 // Half-extent of the playable battlefield (world units). Shared with the setup
 // minimaps so deployment coordinates line up with the in-game bounds.
@@ -127,7 +127,13 @@ export function startGame(config) {
 
   // Entity registries
   const tanks = [], obstacles = [], projectiles = [], grenades = [], crews = [], debris = [], fx = [];
+  const puffs = [], burners = [], smokeScreens = []; // smoke/fire/dust particles
   const bridges = []; // {x, z0, z1, halfW}
+
+  // wind: drifts smoke and dust; stronger in the desert
+  const windAngle = 0.7;
+  const windSpeed = config.location === "north_africa" ? 7 : (wx.precip ? 4 : 2.5);
+  const wind = new THREE.Vector3(Math.cos(windAngle), 0, Math.sin(windAngle)).multiplyScalar(windSpeed);
   let river = null;   // {z0, z1}
 
   // ===========================================================================
@@ -214,6 +220,101 @@ export function startGame(config) {
       const d = t.group.position.distanceTo(pos); if (d < radius) hitTank(t, { type: "he", team }, pos.clone(), amount * (1 - d / radius)); }
     for (const c of crews) { if (!c.alive || c.team === team) continue;
       const d = c.group.position.distanceTo(pos); if (d < radius) hurtCrew(c, amount * 1.5 * (1 - d / radius)); }
+  }
+
+  // ===========================================================================
+  // Smoke / fire / dust particle system  (camera-facing soft sprites)
+  // ===========================================================================
+  const softTex = (() => {
+    const c = document.createElement("canvas"); c.width = c.height = 64;
+    const g = c.getContext("2d"); const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grd.addColorStop(0, "rgba(255,255,255,1)"); grd.addColorStop(0.6, "rgba(255,255,255,0.55)"); grd.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  })();
+
+  function spawnPuff(pos, o = {}) {
+    if (puffs.length > 360) { const old = puffs.shift(); scene.remove(old.s); }
+    const mat = new THREE.SpriteMaterial({ map: softTex, color: o.color != null ? o.color : 0x555555,
+      transparent: true, opacity: 0, depthWrite: false, blending: o.additive ? THREE.AdditiveBlending : THREE.NormalBlending });
+    const s = new THREE.Sprite(mat); s.position.copy(pos);
+    const sz = o.size || 3; s.scale.set(sz, sz, 1);
+    scene.add(s);
+    puffs.push({ s, v: new THREE.Vector3((Math.random() - .5) * (o.spread || 1), o.rise != null ? o.rise : 1.4, (Math.random() - .5) * (o.spread || 1)),
+      life: o.life || 3, max: o.life || 3, grow: o.grow != null ? o.grow : 2.2, peak: o.peak != null ? o.peak : 0.55, drift: o.drift != null ? o.drift : 0.5 });
+  }
+  function updatePuffs(dt) {
+    for (let i = puffs.length - 1; i >= 0; i--) {
+      const p = puffs[i]; p.life -= dt;
+      p.s.position.addScaledVector(p.v, dt); p.s.position.addScaledVector(wind, dt * p.drift);
+      const sc = p.s.scale.x + p.grow * dt; p.s.scale.set(sc, sc, 1);
+      const age = 1 - p.life / p.max; // 0 -> 1
+      p.s.material.opacity = p.peak * (age < 0.15 ? age / 0.15 : (1 - age) / 0.85);
+      if (p.life <= 0) { scene.remove(p.s); puffs.splice(i, 1); }
+    }
+  }
+
+  // burning objects emit smoke (+ fire for level 2)
+  function addBurner(pos, level, ttl) {
+    let fire = null;
+    if (level >= 2) {
+      fire = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex, color: 0xff7a1a, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }));
+      fire.position.copy(pos).add(new THREE.Vector3(0, 1.3, 0)); fire.scale.set(2.6, 3.4, 1); scene.add(fire);
+    }
+    burners.push({ pos: pos.clone(), level, fire, t: Math.random() * 3, emit: 0, ttl: ttl == null ? Infinity : ttl });
+  }
+  function updateBurners(dt) {
+    for (let i = burners.length - 1; i >= 0; i--) {
+      const b = burners[i]; b.t += dt;
+      if (b.ttl !== Infinity) { b.ttl -= dt; if (b.ttl <= 0) { if (b.fire) scene.remove(b.fire); burners.splice(i, 1); continue; } }
+      b.emit -= dt;
+      if (b.emit <= 0) {
+        b.emit = b.level >= 2 ? 0.16 : 0.5;
+        spawnPuff(b.pos.clone().add(new THREE.Vector3(0, b.level >= 2 ? 1.4 : 0.9, 0)),
+          { color: b.level >= 2 ? 0x282828 : 0x8a8a8a, size: 2.4, rise: 2.4, life: b.level >= 2 ? 4.2 : 3, grow: b.level >= 2 ? 3.2 : 2, peak: b.level >= 2 ? 0.7 : 0.4, drift: 0.7 });
+      }
+      if (b.fire) { const f = 1 + Math.sin(b.t * 20) * 0.15 + Math.random() * 0.12; b.fire.scale.set(2.3 * f, 3.1 * f, 1); b.fire.material.opacity = 0.65 + Math.random() * 0.3; }
+    }
+  }
+
+  // smoke grenades create a screen that also blocks AI line-of-sight
+  function addSmokeScreen(pos) { smokeScreens.push({ pos: pos.clone().setY(0), r: 10, ttl: 11, emit: 0 }); }
+  function updateSmokeScreens(dt) {
+    for (let i = smokeScreens.length - 1; i >= 0; i--) {
+      const s = smokeScreens[i]; s.ttl -= dt; s.emit -= dt;
+      if (s.emit <= 0 && s.ttl > 1.5) {
+        s.emit = 0.12;
+        for (let k = 0; k < 2; k++) spawnPuff(s.pos.clone().add(new THREE.Vector3((Math.random() - .5) * s.r, Math.random() * 1.5, (Math.random() - .5) * s.r)),
+          { color: 0xbfbfbf, size: 5, rise: 0.9, life: 4.5, grow: 3.4, peak: 0.75, drift: 0.35, spread: 0.6 });
+      }
+      if (s.ttl <= 0) smokeScreens.splice(i, 1);
+    }
+  }
+  function smokeBlocks(a, b) {
+    for (const s of smokeScreens) {
+      if (s.ttl < 1) continue;
+      const abx = b.x - a.x, abz = b.z - a.z, len2 = abx * abx + abz * abz;
+      let t = len2 > 0 ? ((s.pos.x - a.x) * abx + (s.pos.z - a.z) * abz) / len2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      const dx = a.x + abx * t - s.pos.x, dz = a.z + abz * t - s.pos.z;
+      if (dx * dx + dz * dz < (s.r * 0.85) * (s.r * 0.85)) return true;
+    }
+    return false;
+  }
+
+  // ambient blowing dust
+  const dustBase = config.location === "north_africa" ? 0.12 : (wx.snowGround ? 0.5 : 0.32);
+  let dustTimer = 0;
+  function updateDust(dt) {
+    dustTimer -= dt;
+    if (dustTimer > 0) return;
+    dustTimer = dustBase;
+    const n = config.location === "north_africa" ? 2 : 1;
+    for (let k = 0; k < n; k++) {
+      const off = new THREE.Vector3((Math.random() - .5) * cam.size * 2.4, Math.random() * 2 + 0.2, (Math.random() - .5) * cam.size * 2.4);
+      const at = cam.focus.clone().add(off); at.y = Math.max(0.2, off.y);
+      spawnPuff(at, { color: wx.snowGround ? 0xdfe6ea : 0xc2ad86, size: 2.4, rise: 0.15, life: 4.5, grow: 1.6, peak: wx.snowGround ? 0.16 : 0.2, drift: 1.4, spread: 0.4 });
+    }
   }
 
   // ===========================================================================
@@ -309,6 +410,10 @@ export function startGame(config) {
     o.health -= amount;
     spawnChips(at.clone().setY(clamp(at.y, 0.4, 4)), o.chip, 6, 5);
     o.group.position.x = o.pos.x + rand(-0.05, 0.05);
+    // a battered building starts smoking before it collapses
+    if ((o.type === "building" || o.type === "ruin") && !o.smoking && o.health < (o.type === "building" ? 160 : 90)) {
+      o.smoking = true; addBurner(o.pos.clone().add(new THREE.Vector3(0, o.type === "building" ? 3 : 1.5, 0)), 1);
+    }
     if (o.health <= 0) destroyObstacle(o);
   }
   function destroyObstacle(o) {
@@ -321,10 +426,11 @@ export function startGame(config) {
       const big = o.type === "building";
       spawnChips(o.pos.clone().setY(1), o.chip, big ? 30 : 18, 8);
       if (big) { explode(o.pos.clone().setY(2), true);
-        // collapse into rubble pile
+        // collapse into a burning rubble pile
         for (let i = 0; i < 14; i++) { const r = box(rand(0.6, 1.6), rand(0.4, 0.9), rand(0.6, 1.6), o.chip);
           r.position.copy(o.pos).add(new THREE.Vector3(rand(-3, 3), rand(0.5, 3), rand(-3, 3))); scene.add(r);
           addDebris(r, new THREE.Vector3(rand(-4, 4), rand(2, 6), rand(-4, 4)), { life: DEBRIS_LIFE * 1.5 }); }
+        addBurner(o.pos.clone().setY(0.6), 2, 26); // wreckage burns for a while
       }
       scene.remove(o.group);
       o.radius = o.type === "ruin" ? o.radius : 0; o.solid = o.type === "ruin"; // ruins leave low rubble collider
@@ -460,7 +566,7 @@ export function startGame(config) {
     bars.add(hpBg, hpFill, rlBg, rlFill); built.group.add(bars);
     const t = { team, typeKey, name: spec.name, group: built.group, turret: built.turret, parts: built.parts,
       yaw: yaw || 0, turretYaw: 0, speed: 0, health: spec.health, maxHealth: spec.health, radius: 1.8,
-      cooldown: 0, reload: spec.reload, maxFwd: spec.maxFwd, dmg: spec.dmg, big: spec.big,
+      cooldown: 0, reload: spec.reload, maxFwd: spec.maxFwd, dmg: spec.dmg, big: spec.big, mgCd: 0, smokeCd: 0,
       leftTrackBroken: false, rightTrackBroken: false, turretGone: false, alive: true, disabled: false,
       crewCount: spec.big ? 4 : 3, hasGrenades: Math.random() < 0.6, bars, hpFill, rlFill, rlBg };
     tanks.push(t); return t;
@@ -534,6 +640,7 @@ export function startGame(config) {
       fig.g.position.y = 0; scene.add(fig.g);
       crews.push({ team: tank.team, group: fig.g, legs: fig.legs, torso: fig.g.children[0], yaw: 0,
         health: 24, alive: true, speed: rand(6, 8.5), weapon, grenades: weapon === "grenade" ? 3 : 0,
+        smoke: (i === 0 || Math.random() < 0.35) ? 1 : 0, smokeCd: rand(1, 3),
         cooldown: rand(0.4, 1.4), bob: Math.random() * 6, state: "seek", cover: null, prone: false });
     }
   }
@@ -564,8 +671,16 @@ export function startGame(config) {
     for (const c of crews) {
       if (!c.alive) continue;
       if (c.cooldown > 0) c.cooldown -= dt;
+      if (c.smokeCd > 0) c.smokeCd -= dt;
       const threat = nearestEnemyEntity(c.group.position, c.team, 120).target;
       const threatDist = threat ? threat.group.position.distanceTo(c.group.position) : Infinity;
+
+      // pop a smoke grenade to cover a bail-out under fire
+      if (threat && threatDist < 26 && c.smoke > 0 && c.smokeCd <= 0) {
+        c.smoke--; c.smokeCd = 8;
+        const mid = c.group.position.clone().lerp(threat.group.position, 0.5).setY(1);
+        throwSmoke(c.group.position.clone().setY(1.2), mid, c.team);
+      }
 
       // decide state
       if (threat && threatDist < 9) c.state = "flee";
@@ -643,6 +758,16 @@ export function startGame(config) {
     if (t === controlled) cam.shake = Math.min(1.6, cam.shake + 0.5);
     return true;
   }
+  // coaxial machine gun: rapid, low damage, mostly anti-infantry
+  function fireMG(t, targetPos, ff) {
+    if (t.turretGone || t.mgCd > 0 || !t.alive) return;
+    t.mgCd = 0.09;
+    const from = t.group.position.clone().add(new THREE.Vector3(0, 1.5, 0));
+    const dir = new THREE.Vector3(targetPos.x - from.x, targetPos.y - from.y, targetPos.z - from.z).normalize();
+    dir.x += rand(-0.05, 0.05); dir.z += rand(-0.05, 0.05); dir.normalize();
+    const muzzle = from.addScaledVector(dir, 3.2);
+    fireProjectile(muzzle, dir, t.team, "mg", null, t, ff);
+  }
   function updateProjectiles(dt) {
     for (let i = projectiles.length - 1; i >= 0; i--) {
       const s = projectiles[i]; s.life -= dt;
@@ -662,19 +787,22 @@ export function startGame(config) {
   }
   const grenadeGeo = new THREE.SphereGeometry(0.18, 8, 8);
   const grenadeMat = new THREE.MeshStandardMaterial({ color: 0x3b4022, roughness: 0.7 });
-  function throwGrenade(from, target, team) {
-    const mesh = new THREE.Mesh(grenadeGeo, grenadeMat); mesh.position.copy(from); scene.add(mesh);
+  const smokeGrenMat = new THREE.MeshStandardMaterial({ color: 0x4a4f52, roughness: 0.8 });
+  function throwGrenade(from, target, team, smoke) {
+    const mesh = new THREE.Mesh(grenadeGeo, smoke ? smokeGrenMat : grenadeMat); mesh.position.copy(from); scene.add(mesh);
     const flat = target.clone().sub(from).setY(0), dist = flat.length(), t = clamp(dist / 16, 0.7, 1.6);
     const v = flat.multiplyScalar(1 / t); v.y = 0.5 * 24 * t;
-    grenades.push({ mesh, v, team, fuse: t + 0.05 });
+    grenades.push({ mesh, v, team, fuse: t + 0.05, smoke: !!smoke });
   }
+  const throwSmoke = (from, target, team) => throwGrenade(from, target, team, true);
   function updateGrenades(dt) {
     for (let i = grenades.length - 1; i >= 0; i--) {
       const g = grenades[i]; g.fuse -= dt; g.v.y -= 24 * dt;
       g.mesh.position.addScaledVector(g.v, dt); g.mesh.rotation.x += dt * 8;
       if (g.mesh.position.y <= 0.2 || g.fuse <= 0) {
         const pos = g.mesh.position.clone().setY(0.3);
-        explode(pos, true); spawnChips(pos, 0x3b4022, 10, 7); areaDamage(pos, 6, 45, g.team);
+        if (g.smoke) { addSmokeScreen(pos); spawnPuff(pos.clone().setY(0.6), { color: 0xcccccc, size: 4, rise: 1.5, life: 2, grow: 4, peak: 0.7 }); }
+        else { explode(pos, true); spawnChips(pos, 0x3b4022, 10, 7); areaDamage(pos, 6, 45, g.team); }
         scene.remove(g.mesh); grenades.splice(i, 1);
       }
     }
@@ -713,6 +841,7 @@ export function startGame(config) {
     if (t.disabled) return; t.disabled = true; t.alive = false; t.speed = 0;
     explode(t.group.position.clone().setY(1), true);
     for (const key of ["lower", "upper", "glacis", "turretBody"]) { const m = t.parts[key]; if (m && m.parent && m.material) m.material.color.multiplyScalar(0.4); }
+    addBurner(t.group.position.clone().setY(0.9), 2); // the knocked-out hull burns and smokes
     t.bars.visible = false; spawnCrew(t);
     if (t.team === TEAM.GERMANS) { enemiesLeft = Math.max(0, enemiesLeft - 1); if (enemiesLeft === 0) banner("VICTORY", 0, true, "All Axis armour knocked out"); }
     else {
@@ -763,6 +892,7 @@ export function startGame(config) {
     if (e.key === "Tab") { e.preventDefault(); cycleControl(e.shiftKey ? -1 : 1); return; }
     keys[e.key.toLowerCase()] = true;
     if (e.key === " ") { e.preventDefault(); tryFire(); }
+    if (e.key.toLowerCase() === "g") { e.preventDefault(); if (controlled && controlled.alive && !gameOver) deploySmoke(controlled); }
   }, { signal: sig });
   addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; }, { signal: sig });
 
@@ -803,16 +933,33 @@ export function startGame(config) {
     const w = wireBlocksInfantry(np); if (w) flattenWire(w); // tanks flatten barbed wire they roll over
     if (inRiver(np) && !onBridge(np)) { t.speed *= 0.2; np.copy(prev); } // blocked by river except at bridges
     t.group.position.copy(np);
+    // kick up dust/track spray while rolling
+    if (Math.abs(t.speed) > 2.5 && Math.random() < 0.3) {
+      const back = fwd.clone().multiplyScalar(-1.6);
+      spawnPuff(t.group.position.clone().add(back).setY(0.3),
+        { color: wx.snowGround ? 0xe6ecef : 0xb59f7d, size: 1.8, rise: 0.5, life: 1.6, grow: 1.8, peak: 0.28, drift: 0.8, spread: 0.5 });
+    }
+  }
+  function deploySmoke(t) {
+    if (!t || !t.alive || t.smokeCd > 0) return;
+    t.smokeCd = 7;
+    const yaw = t.turretGone ? t.yaw : t.yaw + t.turretYaw;
+    const dir = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+    const from = t.group.position.clone().add(new THREE.Vector3(0, 1.4, 0));
+    throwSmoke(from, t.group.position.clone().addScaledVector(dir, 24), t.team);
   }
   function updateControlled(dt) {
     const t = controlled; if (!t || !t.alive) return;
     if (t.cooldown > 0) t.cooldown -= dt;
+    if (t.mgCd > 0) t.mgCd -= dt;
+    if (t.smokeCd > 0) t.smokeCd -= dt;
     const throttle = (keys["w"] ? 1 : 0) - (keys["s"] ? 1 : 0), steer = (keys["d"] ? 1 : 0) - (keys["a"] ? 1 : 0);
     driveTank(t, throttle, steer, dt);
     if (!t.turretGone) {
       const dx = aimPoint.x - t.group.position.x, dz = aimPoint.z - t.group.position.z;
       if (dx * dx + dz * dz > 0.5) { const worldYaw = Math.atan2(dx, dz), rel = worldYaw - t.yaw, step = shortAngle(t.turretYaw, rel), max = deg(240) * dt;
         t.turretYaw += clamp(step, -max, max); t.turret.rotation.y = t.turretYaw; }
+      if (keys["f"]) fireMG(t, aimPoint.clone().setY(1), true); // hold F: player MG (hits anything)
     }
   }
   // Desired driving heading: head for the target, but route to a bridge when a
@@ -848,7 +995,7 @@ export function startGame(config) {
   }
 
   function updateAITank(t, dt) {
-    if (!t.alive) return; if (t.cooldown > 0) t.cooldown -= dt;
+    if (!t.alive) return; if (t.cooldown > 0) t.cooldown -= dt; if (t.mgCd > 0) t.mgCd -= dt;
     const { target, dist } = nearestEnemyEntity(t.group.position, t.team, 220);
     if (!target) { driveTank(t, 0, 0, dt); return; }
     const dx = target.group.position.x - t.group.position.x, dz = target.group.position.z - t.group.position.z;
@@ -861,7 +1008,13 @@ export function startGame(config) {
     driveTank(t, throttle, steer, dt);
     if (!t.turretGone) { const rel = aimYaw - t.yaw, s = shortAngle(t.turretYaw, rel);
       t.turretYaw += clamp(s, -deg(140) * dt, deg(140) * dt); t.turret.rotation.y = t.turretYaw;
-      if (t.cooldown <= 0 && dist < 85 && Math.abs(shortAngle(t.yaw + t.turretYaw, aimYaw)) < deg(8)) fireTank(t); }
+      const aligned = Math.abs(shortAngle(t.yaw + t.turretYaw, aimYaw)) < deg(8);
+      const clear = !smokeBlocks(t.group.position, target.group.position); // smoke screens block LOS
+      if (t.cooldown <= 0 && dist < 85 && aligned && clear) fireTank(t);
+      // rake nearby enemy infantry with the machine gun
+      const foot = nearestEnemyEntity(t.group.position, t.team, 42, true).target;
+      if (foot && t.mgCd <= 0 && !smokeBlocks(t.group.position, foot.group.position)) fireMG(t, foot.group.position.clone().setY(1), false);
+    }
   }
 
   // ===========================================================================
@@ -915,6 +1068,7 @@ export function startGame(config) {
     for (const tk of tanks) if (tk !== controlled) updateAITank(tk, dt);
     updateCrew(dt);
     updateProjectiles(dt); updateGrenades(dt); updateFx(dt); updateDebris(dt); updatePrecip(dt);
+    updatePuffs(dt); updateBurners(dt); updateSmokeScreens(dt); updateDust(dt);
     for (const tk of tanks) updateTankBars(tk);
     updateReloadHud(); updateHUD(); updateCamera(dt);
     if (bannerTimer > 0 && !gameOver) { bannerTimer -= dt; if (bannerTimer <= 0) elBanner.style.opacity = 0; }
@@ -946,7 +1100,10 @@ export function startGame(config) {
     tanks, crews, obstacles, projectiles, grenades, debris, bridges,
     get controlled() { return controlled; }, get enemiesLeft() { return enemiesLeft; }, get alliesLeft() { return alliesLeft; },
     get gameOver() { return gameOver; }, get paused() { return paused; }, cycleControl,
-    get camFocus() { return cam.focus.clone(); }, FIELD,
+    get camFocus() { return cam.focus.clone(); }, FIELD, puffs, burners, smokeScreens,
+    smokeBlocksAt(ax, az, bx, bz) { return smokeBlocks({ x: ax, z: az }, { x: bx, z: bz }); },
+    get keyF() { return !!keys["f"]; }, mgFireNow() { if (controlled) fireMG(controlled, aimPoint.clone().setY(1), true); },
+    smokeNow() { if (controlled) deploySmoke(controlled); },
     testShell(x, z, ff) { if (!controlled) return; const pos = controlled.group.position;
       const dir = new THREE.Vector3(x - pos.x, 0, z - pos.z); if (dir.lengthSq() < 1e-6) return; dir.normalize();
       const from = pos.clone().add(new THREE.Vector3(0, 1.35, 0)).addScaledVector(dir, 3.6);
