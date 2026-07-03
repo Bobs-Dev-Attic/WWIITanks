@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+  <asset>
+    <up_axis>Y_UP</up_axis>
+  </asset>
+  <library_geometries>
+    <geometry id="ground-mesh" name="ground">
+      <mesh>
+        <source id="ground-positions">
+          <float_array id="ground-positions-array" count="72">100.0000 -0.2000 -100.0000 100.0000 0.0000 -100.0000 100.0000 0.0000 100.0000 100.0000 -0.2000 100.0000 -100.0000 -0.2000 100.0000 -100.0000 0.0000 100.0000 -100.0000 0.0000 -100.0000 -100.0000 -0.2000 -100.0000 -100.0000 0.0000 -100.0000 -100.0000 0.0000 100.0000 100.0000 0.0000 100.0000 100.0000 0.0000 -100.0000 -100.0000 -0.2000 100.0000 -100.0000 -0.2000 -100.0000 100.0000 -0.2000 -100.0000 100.0000 -0.2000 100.0000 -100.0000 -0.2000 100.0000 100.0000 -0.2000 100.0000 100.0000 0.0000 100.0000 -100.0000 0.0000 100.0000 100.0000 -0.2000 -100.0000 -100.0000 -0.2000 -100.0000 -100.0000 0.0000 -100.0000 100.0000 0.0000 -100.0000</float_array>
+          <technique_common>
+            <accessor source="#ground-positions-array" count="24" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <source id="ground-normals">
+          <float_array id="ground-normals-array" count="72">1.0000 0.0000 0.0000 1.0000 0.0000 0.0000 1.0000 0.0000 0.0000 1.0000 0.0000 0.0000 -1.0000 0.0000 0.0000 -1.0000 0.0000 0.0000 -1.0000 0.0000 0.0000 -1.0000 0.0000 0.0000 0.0000 1.0000 0.0000 0.0000 1.0000 0.0000 0.0000 1.0000 0.0000 0.0000 1.0000 0.0000 0.0000 -1.0000 0.0000 0.0000 -1.0000 0.0000 0.0000 -1.0000 0.0000 0.0000 -1.0000 0.0000 0.0000 0.0000 1.0000 0.0000 0.0000 1.0000 0.0000 0.0000 1.0000 0.0000 0.0000 1.0000 0.0000 0.0000 -1.0000 0.0000 0.0000 -1.0000 0.0000 0.0000 -1.0000 0.0000 0.0000 -1.0000</float_array>
+          <technique_common>
+            <accessor source="#ground-normals-array" count="24" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <source id="ground-texcoords">
+          <float_array id="ground-texcoords-array" count="48">0.0000 0.0000 1.0000 0.0000 1.0000 1.0000 0.0000 1.0000 0.0000 0.0000 1.0000 0.0000 1.0000 1.0000 0.0000 1.0000 0.0000 0.0000 1.0000 0.0000 1.0000 1.0000 0.0000 1.0000 0.0000 0.0000 1.0000 0.0000 1.0000 1.0000 0.0000 1.0000 0.0000 0.0000 1.0000 0.0000 1.0000 1.0000 0.0000 1.0000 0.0000 0.0000 1.0000 0.0000 1.0000 1.0000 0.0000 1.0000</float_array>
+          <technique_common>
+            <accessor source="#ground-texcoords-array" count="24" stride="2">
+              <param name="S" type="float"/>
+              <param name="T" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="ground-vertices">
+          <input semantic="POSITION" source="#ground-positions"/>
+        </vertices>
+        <triangles count="12">
+          <input semantic="VERTEX" source="#ground-vertices" offset="0"/>
+          <input semantic="NORMAL" source="#ground-normals" offset="1"/>
+          <input semantic="TEXCOORD" source="#ground-texcoords" offset="2" set="0"/>
+          <p>0 0 0 1 1 1 2 2 2 0 0 0 2 2 2 3 3 3 4 4 4 5 5 5 6 6 6 4 4 4 6 6 6 7 7 7 8 8 8 9 9 9 10 10 10 8 8 8 10 10 10 11 11 11 12 12 12 13 13 13 14 14 14 12 12 12 14 14 14 15 15 15 16 16 16 17 17 17 18 18 18 16 16 16 18 18 18 19 19 19 20 20 20 21 21 21 22 22 22 20 20 20 22 22 22 23 23 23</p>
+        </triangles>
+      </mesh>
+    </geometry>
+  </library_geometries>
+  <library_visual_scenes>
+    <visual_scene id="Scene" name="Scene">
+      <node id="ground-node" name="ground" type="NODE">
+        <matrix sid="transform">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</matrix>
+        <instance_geometry url="#ground-mesh"/>
+      </node>
+    </visual_scene>
+  </library_visual_scenes>
+  <scene>
+    <instance_visual_scene url="#Scene"/>
+  </scene>
+</COLLADA>

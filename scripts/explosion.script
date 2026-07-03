@@ -1,0 +1,33 @@
+-- Explosion effect: a low-poly fireball block that punches out fast and then
+-- collapses/shrinks away before deleting itself. Cheap, self-contained, and
+-- reads clearly in the isometric view.
+
+local GROW_TIME = 0.12
+local FADE_TIME = 0.35
+local MAX_SCALE = 4.5
+
+function init(self)
+    self.t = 0
+    go.set_scale(0.3)
+end
+
+function update(self, dt)
+    self.t = self.t + dt
+
+    local s
+    if self.t < GROW_TIME then
+        s = 0.3 + (MAX_SCALE - 0.3) * (self.t / GROW_TIME)
+    else
+        local k = (self.t - GROW_TIME) / FADE_TIME
+        if k >= 1 then
+            go.delete()
+            return
+        end
+        s = MAX_SCALE * (1 - k) + 0.3
+    end
+
+    go.set_scale(s)
+    -- lift + spin slightly for a bit of life
+    local rot = go.get_rotation() * vmath.quat_rotation_y(dt * 4)
+    go.set_rotation(rot)
+end

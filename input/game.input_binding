@@ -1,0 +1,56 @@
+key_trigger {
+  input: KEY_W
+  action: "drive_fwd"
+}
+key_trigger {
+  input: KEY_S
+  action: "drive_back"
+}
+key_trigger {
+  input: KEY_A
+  action: "steer_left"
+}
+key_trigger {
+  input: KEY_D
+  action: "steer_right"
+}
+key_trigger {
+  input: KEY_Q
+  action: "pan_left"
+}
+key_trigger {
+  input: KEY_E
+  action: "pan_right"
+}
+key_trigger {
+  input: KEY_R
+  action: "pan_up"
+}
+key_trigger {
+  input: KEY_F
+  action: "pan_down"
+}
+key_trigger {
+  input: KEY_SPACE
+  action: "fire"
+}
+mouse_trigger {
+  input: MOUSE_BUTTON_LEFT
+  action: "fire"
+}
+mouse_trigger {
+  input: MOUSE_BUTTON_RIGHT
+  action: "cam_rotate"
+}
+mouse_trigger {
+  input: MOUSE_BUTTON_MIDDLE
+  action: "cam_pan"
+}
+mouse_trigger {
+  input: MOUSE_WHEEL_UP
+  action: "zoom_in"
+}
+mouse_trigger {
+  input: MOUSE_WHEEL_DOWN
+  action: "zoom_out"
+}

@@ -1,0 +1,3 @@
+mesh: "/props/cover.gltf"
+material: "/materials/tank.material"
+textures: "/textures/dirt.png"

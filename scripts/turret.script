@@ -1,0 +1,46 @@
+-- Player turret: an independent game object that rides on top of the hull and
+-- rotates to track the mouse cursor (the "aim point" unprojected onto the
+-- ground by the camera). Keeping it separate from the hull lets the gun aim
+-- independently of the direction the tank is driving.
+
+local TURN_SPEED = math.rad(220)   -- how fast the turret slews, rad/s
+local HEIGHT     = 1.0
+
+local function shortest_angle(from, to)
+    local d = (to - from) % (2 * math.pi)
+    if d > math.pi then d = d - 2 * math.pi end
+    return d
+end
+
+function init(self)
+    self.aim = nil
+    self.yaw = 0
+end
+
+function update(self, dt)
+    -- ride on the hull
+    local ok, ppos = pcall(go.get_position, "/player")
+    if ok then
+        go.set_position(ppos + vmath.vector3(0, HEIGHT, 0))
+    end
+
+    if self.aim then
+        local pos = go.get_position()
+        local dx, dz = self.aim.x - pos.x, self.aim.z - pos.z
+        if dx * dx + dz * dz > 0.04 then
+            local target = math.atan2(dx, dz)
+            local step = shortest_angle(self.yaw, target)
+            local maxstep = TURN_SPEED * dt
+            if step >  maxstep then step =  maxstep end
+            if step < -maxstep then step = -maxstep end
+            self.yaw = self.yaw + step
+            go.set_rotation(vmath.quat_rotation_y(self.yaw))
+        end
+    end
+end
+
+function on_message(self, message_id, message)
+    if message_id == hash("aim_point") then
+        self.aim = message.pos
+    end
+end

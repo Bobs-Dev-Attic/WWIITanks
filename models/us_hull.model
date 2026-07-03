@@ -1,0 +1,3 @@
+mesh: "/tanks/hull.gltf"
+material: "/materials/tank.material"
+textures: "/textures/olive.png"

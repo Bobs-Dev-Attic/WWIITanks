@@ -1,0 +1,47 @@
+-- HUD: shows hull integrity + remaining enemies, and the win/lose banner.
+
+local NUM_ENEMIES = 4
+
+function init(self)
+    self.health = 100
+    self.max    = 100
+    self.enemies = NUM_ENEMIES
+    self.over    = false
+    self.status  = gui.get_node("status")
+    self.banner  = gui.get_node("banner")
+    self:refresh()
+end
+
+function refresh(self)
+    local pct = math.floor(0.5 + 100 * self.health / self.max)
+    gui.set_text(self.status, string.format("HULL %d%%   ENEMIES %d", pct, self.enemies))
+    if self.health <= 30 then
+        gui.set_color(self.status, vmath.vector4(1.0, 0.4, 0.35, 1.0))
+    else
+        gui.set_color(self.status, vmath.vector4(0.6, 1.0, 0.6, 1.0))
+    end
+end
+
+function on_message(self, message_id, message)
+    if message_id == hash("set_health") then
+        self.health = message.health
+        self.max = message.max or self.max
+        self:refresh()
+    elseif message_id == hash("enemy_killed") then
+        self.enemies = math.max(0, self.enemies - 1)
+        self:refresh()
+        if self.enemies == 0 and not self.over then
+            self.over = true
+            gui.set_text(self.banner, "VICTORY")
+            gui.set_color(self.banner, vmath.vector4(0.4, 1.0, 0.4, 1.0))
+        end
+    elseif message_id == hash("game_over") then
+        if not self.over then
+            self.over = true
+            gui.set_text(self.banner, message.win and "VICTORY" or "KNOCKED OUT")
+            gui.set_color(self.banner, message.win
+                and vmath.vector4(0.4, 1.0, 0.4, 1.0)
+                or vmath.vector4(1.0, 0.4, 0.35, 1.0))
+        end
+    end
+end
