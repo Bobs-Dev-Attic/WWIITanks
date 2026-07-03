@@ -24,6 +24,23 @@ The web build is a faithful port of the Defold MVP (same tanks, camera,
 controls, combat) written so it can actually be hosted and verified end-to-end.
 The Defold project remains the canonical engine implementation described below.
 
+The web build has since grown well beyond the MVP with these battlefield systems:
+
+- **Allied tanks** fight the German company alongside the player; a generic
+  team-based AI drives every non-player tank.
+- **Destructible cover** — trees, rocks, and crates. Shells **pass through**
+  them, chipping them and flinging **debris**; enough hits topple/shatter them.
+- **Debris physics** — chunks fly, bounce, rest on the ground, then **sink into
+  the earth and fade out over ~30 seconds**.
+- **Location-based tank damage** — a hit's effect depends on where and what it
+  is: **tracks break** (disabling movement to one side so the tank slews), the
+  **turret can be blown clean off**, and cupolas/fenders can be knocked loose.
+  Machine-gun fire mostly pings off armour; AP shells and grenades do the work.
+- **Reload indicators** — a HUD reload bar/timer plus a floating reload bar over
+  every tank while its gun is cooling down.
+- **Bailing crews** — when a tank is disabled the tankers **climb out and flee**,
+  firing rifles and **lobbing grenades** as they run.
+
 ---
 
 ## Controls
