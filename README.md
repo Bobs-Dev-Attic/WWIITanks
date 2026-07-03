@@ -61,6 +61,12 @@ The web build has since grown well beyond the MVP with these battlefield systems
 - **Tank types & rosters** — Light/Medium/Heavy per faction (Stuart/Sherman/
   Pershing vs Panzer II/Panzer IV/Tiger), each with distinct armour, speed, and
   gun, deployed from the setup minimaps.
+- **Soft vehicles** — deployable alongside the tanks: **personnel carriers**
+  (M3 Half-track / Sd.Kfz. 251) that carry infantry and **unload a squad when
+  knocked out**, **MG jeeps** (Willys .50-cal / Kübelwagen), and **motorcycles**
+  (with sidecar MG). They're fast and **machine-gun armed but unarmoured** — no
+  main gun, and MG fire shreds them — so their AI raids, harasses, and dodges
+  tanks. You can Tab into and drive them too.
 - **Navigating AI** — AI tanks route to and cross **bridges** to reach the
   enemy, steer around solid obstacles (buildings, ruins, rocks, and — for all
   but heavies — anti-tank hedgehogs), and **drive straight through** what they
