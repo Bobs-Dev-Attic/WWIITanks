@@ -24,6 +24,13 @@ The web build is a faithful port of the Defold MVP (same tanks, camera,
 controls, combat) written so it can actually be hosted and verified end-to-end.
 The Defold project remains the canonical engine implementation described below.
 
+The setup screen has a **🎲 Randomize** button (top-right) that rolls every
+setting, and a **Historical Battle** dropdown that recreates famous WWII tank
+engagements — Villers-Bocage, Operation Goodwood, Arracourt, the Battle of the
+Bulge, El Alamein, Kasserine Pass, Prokhorovka/Kursk, and Brody — approximated
+with the game's roster (location, weather, both sides' tank mixes, and fire
+support), with a short historical note.
+
 The web build opens on a **setup screen** (tabbed): a **Battlefield** tab to
 choose location + weather (with the version number), and **Allies**/**Axis**
 tabs where you set the **count of each tank type** (− / + steppers) and can
