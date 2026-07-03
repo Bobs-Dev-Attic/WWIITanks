@@ -61,6 +61,21 @@ The web build has since grown well beyond the MVP with these battlefield systems
 - **Terrain editor** — a setup **Terrain** tab to add your own buildings, ruins,
   trees, rocks, hedgehogs, and barbed wire anywhere on the field, on top of the
   location's generated terrain.
+- **WWII armour tactics** — the AI fights by doctrine, not just "drive at the
+  enemy":
+  - **Roles by class** — light tanks **scout & flank** (swing to the side/rear),
+    mediums **bound forward with overwatch** (alternating fire-and-movement) and
+    keep **mutual support** (won't charge in alone), heavies **stand off and
+    support by fire**, keeping their glacis to the enemy.
+  - **Hull-down / shoot-and-scoot** — tanks tuck behind hard cover to reload,
+    then peek to fire.
+  - **Withdraw under smoke** — a badly damaged tank reverses in good order,
+    facing the enemy, popping smoke to break contact.
+  - **Real armour facing** — the thick sloped **frontal glacis bounces shots**;
+    **sides and rear are weak**, so flanking a tank actually pays off.
+  - **Real cover** — shells punch through foliage but are **stopped by masonry
+    and rock**, so buildings/ruins/boulders give genuine protection and block
+    line-of-sight (as does smoke).
 - **Atmosphere & effects** — damaged buildings **smoke**, destroyed structures
   and knocked-out tanks **burn** with fire and rising smoke, and **dust blows**
   across the field (kicked up by moving tanks; heaviest in the desert).
