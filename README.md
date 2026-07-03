@@ -26,8 +26,10 @@ The Defold project remains the canonical engine implementation described below.
 
 The web build opens on a **setup screen** (tabbed): a **Battlefield** tab to
 choose location + weather (with the version number), and **Allies**/**Axis**
-tabs to pick tank types and **place them on a minimap** in your deployment zone.
-In battle, press **Tab** to take command of any friendly tank.
+tabs where you set the **count of each tank type** (− / + steppers) and can
+fine-place them on a minimap in your deployment zone. In battle, a **top menu
+bar** (Setup Battle · Restart · Pause · Help · Leave) runs the match, and
+**Tab** takes command of any friendly tank.
 
 The web build has since grown well beyond the MVP with these battlefield systems:
 

@@ -72,6 +72,11 @@ export function startGame(config) {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   app.appendChild(renderer.domElement);
 
+  // lifecycle: one AbortController removes every listener on dispose()
+  const ac = new AbortController();
+  const sig = ac.signal;
+  let paused = false, rafId = 0, disposed = false;
+
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(wx.sky);
   scene.fog = new THREE.Fog(wx.sky, wx.fog[0], wx.fog[1]);
@@ -718,23 +723,23 @@ export function startGame(config) {
     if (e.key === "Tab") { e.preventDefault(); cycleControl(e.shiftKey ? -1 : 1); return; }
     keys[e.key.toLowerCase()] = true;
     if (e.key === " ") { e.preventDefault(); tryFire(); }
-  });
-  addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
+  }, { signal: sig });
+  addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; }, { signal: sig });
 
   let orbiting = false, panning = false;
   const mouseNDC = new THREE.Vector2(), aimPoint = new THREE.Vector3(0, 0, -10);
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), raycaster = new THREE.Raycaster();
   const canvas = renderer.domElement;
-  canvas.addEventListener("contextmenu", (e) => e.preventDefault());
-  canvas.addEventListener("mousedown", (e) => { if (e.button === 0) tryFire(); else if (e.button === 2) orbiting = true; else if (e.button === 1) { panning = true; e.preventDefault(); } });
-  addEventListener("mouseup", (e) => { if (e.button === 2) orbiting = false; if (e.button === 1) panning = false; });
+  canvas.addEventListener("contextmenu", (e) => e.preventDefault(), { signal: sig });
+  canvas.addEventListener("mousedown", (e) => { if (e.button === 0) tryFire(); else if (e.button === 2) orbiting = true; else if (e.button === 1) { panning = true; e.preventDefault(); } }, { signal: sig });
+  addEventListener("mouseup", (e) => { if (e.button === 2) orbiting = false; if (e.button === 1) panning = false; }, { signal: sig });
   addEventListener("mousemove", (e) => {
     mouseNDC.x = (e.clientX / window.innerWidth) * 2 - 1; mouseNDC.y = -(e.clientY / window.innerHeight) * 2 + 1;
     if (orbiting) { cam.azimuth -= e.movementX * 0.006; cam.pitch = clamp(cam.pitch - e.movementY * 0.006, deg(12), deg(82)); }
     if (panning) { const right = new THREE.Vector3(Math.cos(cam.azimuth), 0, -Math.sin(cam.azimuth)), fwd = new THREE.Vector3(Math.sin(cam.azimuth), 0, Math.cos(cam.azimuth)), k = cam.size * 0.006;
       cam.pan.addScaledVector(right, -e.movementX * k).addScaledVector(fwd, -e.movementY * k); }
-  });
-  canvas.addEventListener("wheel", (e) => { e.preventDefault(); cam.size = clamp(cam.size * (e.deltaY > 0 ? 1.1 : 1 / 1.1), MIN_SIZE, MAX_SIZE); }, { passive: false });
+  }, { signal: sig });
+  canvas.addEventListener("wheel", (e) => { e.preventDefault(); cam.size = clamp(cam.size * (e.deltaY > 0 ? 1.1 : 1 / 1.1), MIN_SIZE, MAX_SIZE); }, { passive: false, signal: sig });
   function updateAim() { raycaster.setFromCamera(mouseNDC, camera); const hit = new THREE.Vector3(); if (raycaster.ray.intersectPlane(groundPlane, hit)) aimPoint.copy(hit); }
   function tryFire() { if (controlled && controlled.alive && !gameOver) fireTank(controlled); }
 
@@ -788,10 +793,12 @@ export function startGame(config) {
   const elStatus = document.getElementById("status"), elFill = document.getElementById("hpfill"), elBanner = document.getElementById("banner");
   let gameOver = false;
   const hud = document.getElementById("hud");
-  const elReload = document.createElement("div"); elReload.style.cssText = "position:absolute;top:176px;left:18px;width:240px;height:10px;border:1px solid rgba(255,255,255,.3);border-radius:3px;overflow:hidden;background:rgba(0,0,0,.35)";
+  const elReload = document.createElement("div"); elReload.style.cssText = "position:absolute;top:210px;left:18px;width:240px;height:10px;border:1px solid rgba(255,255,255,.3);border-radius:3px;overflow:hidden;background:rgba(0,0,0,.35)";
   const elReloadFill = document.createElement("div"); elReloadFill.style.cssText = "height:100%;width:0%;background:linear-gradient(90deg,#e0a12a,#ffe08a)";
-  const elReloadLabel = document.createElement("div"); elReloadLabel.style.cssText = "position:absolute;top:190px;left:18px;font-size:11px;letter-spacing:1px;opacity:.85";
+  const elReloadLabel = document.createElement("div"); elReloadLabel.style.cssText = "position:absolute;top:224px;left:18px;font-size:11px;letter-spacing:1px;opacity:.85";
   elReload.appendChild(elReloadFill); hud.append(elReload, elReloadLabel);
+  // track HUD nodes we created so dispose() can remove them
+  const ownHudNodes = [elReload, elReloadLabel];
 
   function updateHUD() {
     if (!controlled) { elStatus.textContent = `ALLIES ${alliesLeft}   ENEMIES ${enemiesLeft}`; elFill.style.width = "0%"; return; }
@@ -819,10 +826,13 @@ export function startGame(config) {
   // ===========================================================================
   // Main loop
   // ===========================================================================
-  addEventListener("resize", () => renderer.setSize(window.innerWidth, window.innerHeight));
+  addEventListener("resize", () => renderer.setSize(window.innerWidth, window.innerHeight), { signal: sig });
   let last = 0;
   function frame(now) {
+    if (disposed) return;
+    rafId = requestAnimationFrame(frame);
     const t = now || 0; const dt = Math.min((t - last) / 1000 || 0.016, 0.05); last = t; _t0 = t / 1000;
+    if (paused) { renderer.render(scene, camera); return; }
     updateAim();
     updateControlled(dt);
     for (const tk of tanks) if (tk !== controlled) updateAITank(tk, dt);
@@ -833,14 +843,34 @@ export function startGame(config) {
     if (bannerTimer > 0 && !gameOver) { bannerTimer -= dt; if (bannerTimer <= 0) elBanner.style.opacity = 0; }
     if (hudFlash > 0) { hudFlash -= dt; app.style.filter = `brightness(${1 + hudFlash * 2})`; } else app.style.filter = "";
     renderer.render(scene, camera);
-    requestAnimationFrame(frame);
   }
-  requestAnimationFrame(frame);
+  rafId = requestAnimationFrame(frame);
 
-  // smoke-test surface
-  window.__game = { tanks, crews, obstacles, projectiles, grenades, debris, bridges,
+  // ---- lifecycle handle ---------------------------------------------------
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    ac.abort();
+    cancelAnimationFrame(rafId);
+    for (const n of ownHudNodes) n.remove();
+    app.style.filter = "";
+    scene.traverse((o) => { if (o.geometry) o.geometry.dispose?.(); });
+    renderer.dispose();
+    if (renderer.forceContextLoss) renderer.forceContextLoss();
+    if (renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);
+  }
+
+  const handle = {
+    dispose,
+    pause() { paused = true; return true; },
+    resume() { paused = false; last = 0; return false; },
+    togglePause() { paused = !paused; if (!paused) last = 0; return paused; },
+    // smoke-test surface
+    tanks, crews, obstacles, projectiles, grenades, debris, bridges,
     get controlled() { return controlled; }, get enemiesLeft() { return enemiesLeft; }, get alliesLeft() { return alliesLeft; },
-    get gameOver() { return gameOver; }, cycleControl,
-    killEnemy() { const e = enemyTanks.find((t) => t.alive); if (e) disableTank(e); } };
-  return window.__game;
+    get gameOver() { return gameOver; }, get paused() { return paused; }, cycleControl,
+    killEnemy() { const e = enemyTanks.find((t) => t.alive); if (e) disableTank(e); },
+  };
+  window.__game = handle;
+  return handle;
 }
