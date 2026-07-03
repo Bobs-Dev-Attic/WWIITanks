@@ -4,9 +4,13 @@
 /.editor_settings
 *.projectc
 
-# Build tooling / output
+# Build tooling
 /.bob/
-/dist/
+
+# NOTE: ./dist (the built HTML5 bundle) is intentionally NOT ignored.
+# Vercel's git integration cannot build a Defold project itself, so the
+# bundle produced by the Defold editor / tools/build_html5.sh must be
+# committed for Vercel to have something static to serve. See README.
 
 # Vercel
 /.vercel/
