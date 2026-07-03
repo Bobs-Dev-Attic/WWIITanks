@@ -27,6 +27,9 @@ scale = 1
 [script]
 shared_state = 1
 
+[native_extension]
+app_manifest = /game.appmanifest
+
 [html5]
 htmlfile = /builtins/manifests/web/engine_template.html
 scale_mode = fit

@@ -1,0 +1,102 @@
+# Defold application manifest.
+#
+# This game resolves tank/shell collisions in Lua (see scripts/world.lua) and
+# uses no `collisionobject` components, so the Box2D/Bullet physics engines are
+# dead weight. Excluding them and linking the built-in `physics_null` stub
+# shrinks the engine — most noticeably the wasm-web bundle served on Vercel.
+#
+# NOTE: because physics is stripped here, adding collisionobject/collectionproxy
+# physics later requires removing the excludeLibs/libs entries below (or the
+# whole [native_extension] app_manifest line in game.project).
+
+platforms:
+    common:
+        context:
+            excludeSymbols: []
+            symbols: []
+            libs: []
+            linkFlags: []
+
+    x86_64-osx:
+        context:
+            excludeLibs: ["physics", "LinearMath", "BulletDynamics", "BulletCollision", "Box2D"]
+            excludeSymbols: []
+            libs: ["physics_null"]
+            linkFlags: []
+
+    arm64-osx:
+        context:
+            excludeLibs: ["physics", "LinearMath", "BulletDynamics", "BulletCollision", "Box2D"]
+            excludeSymbols: []
+            libs: ["physics_null"]
+            linkFlags: []
+
+    x86_64-linux:
+        context:
+            excludeLibs: ["physics", "LinearMath", "BulletDynamics", "BulletCollision", "Box2D"]
+            excludeSymbols: []
+            libs: ["physics_null"]
+            linkFlags: []
+
+    arm64-linux:
+        context:
+            excludeLibs: ["physics", "LinearMath", "BulletDynamics", "BulletCollision", "Box2D"]
+            excludeSymbols: []
+            libs: ["physics_null"]
+            linkFlags: []
+
+    x86_64-win32:
+        context:
+            excludeLibs: ["libphysics", "libLinearMath", "libBulletDynamics", "libBulletCollision", "libBox2D"]
+            excludeSymbols: []
+            libs: ["libphysics_null.lib"]
+            linkFlags: []
+
+    x86-win32:
+        context:
+            excludeLibs: ["libphysics", "libLinearMath", "libBulletDynamics", "libBulletCollision", "libBox2D"]
+            excludeSymbols: []
+            libs: ["libphysics_null.lib"]
+            linkFlags: []
+
+    arm64-ios:
+        context:
+            excludeLibs: ["physics", "LinearMath", "BulletDynamics", "BulletCollision", "Box2D"]
+            excludeSymbols: []
+            libs: ["physics_null"]
+            linkFlags: []
+
+    x86_64-ios:
+        context:
+            excludeLibs: ["physics", "LinearMath", "BulletDynamics", "BulletCollision", "Box2D"]
+            excludeSymbols: []
+            libs: ["physics_null"]
+            linkFlags: []
+
+    armv7-android:
+        context:
+            excludeLibs: ["physics", "LinearMath", "BulletDynamics", "BulletCollision", "Box2D"]
+            excludeSymbols: []
+            libs: ["physics_null"]
+            linkFlags: []
+
+    arm64-android:
+        context:
+            excludeLibs: ["physics", "LinearMath", "BulletDynamics", "BulletCollision", "Box2D"]
+            excludeSymbols: []
+            libs: ["physics_null"]
+            linkFlags: []
+
+    js-web:
+        context:
+            excludeLibs: ["physics", "LinearMath", "BulletDynamics", "BulletCollision", "Box2D"]
+            excludeSymbols: []
+            libs: ["physics_null"]
+            linkFlags: []
+
+    wasm-web:
+        context:
+            excludeLibs: ["physics", "LinearMath", "BulletDynamics", "BulletCollision", "Box2D"]
+            excludeSymbols: []
+            libs: ["physics_null"]
+            linkFlags: []

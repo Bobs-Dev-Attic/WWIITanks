@@ -36,6 +36,7 @@ knocked out.
 
 ```
 game.project              Defold project configuration + bootstrap
+game.appmanifest          Strips the unused physics engine to shrink the build
 input/game.input_binding  Keyboard/mouse action bindings
 
 main/
