@@ -110,25 +110,50 @@ npx serve dist
 
 ## Deploying to Vercel
 
-The build is a static site, so any static host works. For Vercel:
+> **Important:** Vercel's build container **cannot build a Defold project** —
+> there is no Defold engine there. You must build the HTML5 bundle yourself
+> (Defold editor or `bob`) and hand the finished static files to Vercel. If you
+> connect the repo to Vercel and just let it "build", it produces empty output
+> and every URL returns **404**.
 
-**Option A — deploy the built folder directly (simplest):**
+The quickest way to produce the bundle is the **Defold editor**:
+`Project → Bundle → HTML5 Application…`. It uses the engine the editor already
+has (no `bob` download needed). The result is a folder containing `index.html`,
+a `.wasm`, a `.js` loader, and the packed assets.
+
+Then pick one route:
+
+**Option A — deploy the built folder directly (simplest, no repo changes):**
 
 ```bash
-./tools/build_html5.sh
+# after bundling in the editor, or:  ./tools/build_html5.sh
 vercel deploy ./dist --prod
 ```
 
-**Option B — CI build + deploy on push.** `.github/workflows/build.yml` builds
-the bundle on every push and, if a `VERCEL_TOKEN` repository secret is present,
-deploys it to production automatically.
+This uploads the actual static files, independent of any git integration. The
+folder you pass must have `index.html` at its top level (the `build_html5.sh`
+script flattens Defold's title-named subfolder into `./dist` for exactly this).
 
-`vercel.json` sets the correct `application/wasm` content type and the
+**Option B — commit the bundle so the git integration serves it.** If your
+Vercel project is connected to GitHub, commit the built bundle into `./dist`
+(it is intentionally **not** git-ignored) and push:
+
+```bash
+./tools/build_html5.sh          # or copy the editor bundle into ./dist
+git add dist && git commit -m "Deploy: update HTML5 bundle" && git push
+```
+
+`vercel.json` sets `outputDirectory: dist` with no build step, so Vercel serves
+those committed files as-is. Re-run the build and re-commit whenever the game
+changes.
+
+**Option C — CI build + deploy on push.** `.github/workflows/build.yml` runs
+`build_html5.sh` on every push and, if a `VERCEL_TOKEN` repository secret is
+present, deploys the bundle with `vercel deploy ./dist --prod`. This needs the
+GitHub runner to reach `d.defold.com` to download `bob`.
+
+`vercel.json` also sets the correct `application/wasm` content type and the
 cross-origin isolation headers Defold's WebAssembly runtime prefers.
-
-> Note: Vercel's own build container does not run Defold. Either build locally /
-> in CI and deploy the resulting `dist/` (as above), or commit `dist/` and point
-> Vercel at it as a static output directory.
 
 ---
 
