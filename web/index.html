@@ -6,62 +6,133 @@
   <title>WWII Tanks — Isometric Simulator</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🚜</text></svg>" />
   <style>
-    :root { color-scheme: dark; }
+    :root { color-scheme: dark; --ink:#e8ecd8; --panel:#171b16; --panel2:#20261e; --edge:#3a4432; --accent:#ffe08a; --allies:#7ac74f; --axis:#c98a8a; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0e10; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0e10; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--ink); }
     #app { position: fixed; inset: 0; }
     canvas { display: block; }
 
-    #hud {
-      position: fixed; inset: 0; pointer-events: none;
-      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-      color: #e8ecd8; text-shadow: 0 1px 2px rgba(0,0,0,.8);
-      user-select: none;
-    }
-    #controls {
-      position: absolute; top: 16px; left: 18px; font-size: 13px; line-height: 1.5;
-      opacity: .9;
-    }
-    #controls b { color: #ffe08a; letter-spacing: 1px; }
-    #status {
-      position: absolute; top: 118px; left: 18px; font-size: 18px; font-weight: 700;
-      letter-spacing: .5px;
-    }
-    #hpbar {
-      position: absolute; top: 150px; left: 18px; width: 240px; height: 14px;
-      border: 1px solid rgba(255,255,255,.35); border-radius: 3px; overflow: hidden;
-      background: rgba(0,0,0,.35);
-    }
+    /* ---------- Setup screen ---------- */
+    #setup { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 18px;
+      background: radial-gradient(1200px 800px at 50% -10%, #2b3524, #0c0f0b 70%); z-index: 20; overflow:auto; }
+    .card { width: min(880px, 96vw); background: var(--panel); border: 1px solid var(--edge); border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,.6); overflow: hidden; }
+    .head { display: flex; align-items: baseline; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--edge); background: linear-gradient(#20261e,#171b16); }
+    .head h1 { font-size: 22px; letter-spacing: 3px; color: var(--accent); }
+    .head .ver { font-size: 12px; opacity: .7; }
+    .tabs { display: flex; gap: 2px; padding: 10px 14px 0; }
+    .tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; border: 1px solid var(--edge); border-bottom: none;
+      border-radius: 8px 8px 0 0; background: #12160f; opacity: .7; letter-spacing: 1px; font-size: 13px; user-select: none; }
+    .tab.active { background: var(--panel2); opacity: 1; color: var(--accent); }
+    .panel { display: none; padding: 18px 20px; min-height: 340px; }
+    .panel.active { display: block; }
+    .row { display: flex; gap: 20px; flex-wrap: wrap; }
+    label.field { display: block; margin-bottom: 14px; }
+    label.field span { display: block; font-size: 12px; opacity: .75; margin-bottom: 6px; letter-spacing: 1px; }
+    select, button { font-family: inherit; }
+    select { width: 260px; padding: 9px 10px; background: #10140d; color: var(--ink); border: 1px solid var(--edge); border-radius: 6px; }
+    .desc { font-size: 12.5px; line-height: 1.6; opacity: .82; max-width: 380px; }
+    .help { margin-top: 14px; font-size: 12px; line-height: 1.7; opacity: .7; border-top: 1px dashed var(--edge); padding-top: 12px; }
+    .help b { color: var(--accent); }
+
+    .palette { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .chip { padding: 8px 11px; border: 1px solid var(--edge); border-radius: 6px; background: #10140d; cursor: pointer; font-size: 12.5px; }
+    .chip.sel { outline: 2px solid var(--accent); color: var(--accent); }
+    .chip small { opacity: .6; }
+    .mapwrap { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+    .mini { border: 1px solid var(--edge); border-radius: 8px; background: #0e120b; cursor: crosshair; touch-action: none; }
+    .mapside { font-size: 12px; line-height: 1.7; opacity: .85; max-width: 300px; }
+    .mapside .cnt { color: var(--accent); font-size: 14px; }
+    .btn { padding: 9px 14px; border: 1px solid var(--edge); border-radius: 6px; background: #12160f; color: var(--ink); cursor: pointer; font-size: 12.5px; letter-spacing: 1px; }
+    .btn:hover { border-color: var(--accent); }
+    .foot { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-top: 1px solid var(--edge); background: #12160f; }
+    .start { padding: 12px 26px; font-size: 15px; letter-spacing: 2px; color: #10140d; background: linear-gradient(#ffe08a,#e0a12a); border: none; border-radius: 7px; cursor: pointer; font-weight: 700; }
+    .zone-allies { color: var(--allies); } .zone-axis { color: var(--axis); }
+
+    /* ---------- In-game HUD ---------- */
+    #hud { position: fixed; inset: 0; pointer-events: none; color: var(--ink); text-shadow: 0 1px 2px rgba(0,0,0,.85); user-select: none; display: none; }
+    #controls { position: absolute; top: 16px; left: 18px; font-size: 13px; line-height: 1.5; opacity: .9; }
+    #controls b { color: var(--accent); letter-spacing: 1px; }
+    #status { position: absolute; top: 122px; left: 18px; font-size: 16px; font-weight: 700; letter-spacing: .5px; }
+    #hpbar { position: absolute; top: 152px; left: 18px; width: 240px; height: 14px; border: 1px solid rgba(255,255,255,.35); border-radius: 3px; overflow: hidden; background: rgba(0,0,0,.35); }
     #hpfill { height: 100%; width: 100%; background: linear-gradient(90deg,#7ac74f,#b6e36a); transition: width .12s linear; }
-    #banner {
-      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-      font-size: 64px; font-weight: 800; letter-spacing: 4px; opacity: 0;
-      transition: opacity .4s ease; text-align: center;
-    }
-    #banner small { display:block; font-size: 18px; font-weight: 600; letter-spacing: 1px; opacity:.85; margin-top: 10px; }
-    #hint {
-      position: absolute; bottom: 14px; left: 0; right: 0; text-align: center;
-      font-size: 12px; opacity: .55;
-    }
+    #banner { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 60px; font-weight: 800; letter-spacing: 4px; opacity: 0; transition: opacity .35s ease; text-align: center; }
+    #banner small { display: block; font-size: 17px; font-weight: 600; letter-spacing: 1px; opacity: .85; margin-top: 10px; }
+    #hint { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; font-size: 12px; opacity: .55; }
   </style>
 </head>
 <body>
+  <!-- ===== Setup screen ===== -->
+  <div id="setup">
+    <div class="card">
+      <div class="head"><h1>WWII&nbsp;TANKS</h1><div class="ver" id="ver">v0.0.0</div></div>
+      <div class="tabs">
+        <div class="tab active" data-tab="battlefield">BATTLEFIELD</div>
+        <div class="tab" data-tab="allies">ALLIES</div>
+        <div class="tab" data-tab="axis">AXIS</div>
+      </div>
+
+      <div class="panel active" data-panel="battlefield">
+        <div class="row">
+          <div>
+            <label class="field"><span>LOCATION</span><select id="sel-location"></select></label>
+            <label class="field"><span>WEATHER</span><select id="sel-weather"></select></label>
+          </div>
+          <div class="desc" id="loc-desc"></div>
+        </div>
+        <div class="help">
+          <b>Controls</b> — W/S drive · A/D steer · Mouse aim · Click/Space fire · <b>Tab</b> switch tank<br>
+          RMB orbit camera · MMB / arrow keys pan · Wheel zoom<br>
+          Cross <b>rivers</b> only at bridges · shells punch through cover · disabled crews bail out and fight on.
+        </div>
+      </div>
+
+      <div class="panel" data-panel="allies">
+        <div class="palette" id="pal-allies"></div>
+        <div class="mapwrap">
+          <canvas id="map-allies" class="mini" width="280" height="280"></canvas>
+          <div class="mapside">
+            <p>Deploy <b class="zone-allies">Allied</b> armour in the <b class="zone-allies">southern</b> (lower) half. Pick a tank above, then click the map to place it. Group tanks by clustering them.</p>
+            <p style="margin-top:10px">Deployed: <span class="cnt" id="cnt-allies">0</span></p>
+            <p style="margin-top:8px"><button class="btn" id="clr-allies">CLEAR</button> <button class="btn" id="auto-allies">AUTO 4</button></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" data-panel="axis">
+        <div class="palette" id="pal-axis"></div>
+        <div class="mapwrap">
+          <canvas id="map-axis" class="mini" width="280" height="280"></canvas>
+          <div class="mapside">
+            <p>Deploy <b class="zone-axis">Axis</b> armour in the <b class="zone-axis">northern</b> (upper) half. Pick a tank above, then click the map to place it.</p>
+            <p style="margin-top:10px">Deployed: <span class="cnt" id="cnt-axis">0</span></p>
+            <p style="margin-top:8px"><button class="btn" id="clr-axis">CLEAR</button> <button class="btn" id="auto-axis">AUTO 5</button></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="foot">
+        <div style="font-size:12px;opacity:.65" id="foot-summary"></div>
+        <button class="start" id="start">START BATTLE ▸</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Game ===== -->
   <div id="app"></div>
   <div id="hud">
     <div id="controls">
       <b>WWII TANKS</b><br>
       W/S drive &nbsp; A/D steer<br>
       Mouse aim &nbsp; Click / Space fire<br>
-      RMB orbit &nbsp; MMB / arrows pan &nbsp; Wheel zoom
+      <b>Tab</b> switch tank &nbsp; RMB orbit &nbsp; Wheel zoom
     </div>
-    <div id="status">HULL 100% &nbsp; ENEMIES 4</div>
+    <div id="status">—</div>
     <div id="hpbar"><div id="hpfill"></div></div>
     <div id="banner"></div>
-    <div id="hint">Fight alongside your allies · destroy cover · break tracks &amp; blow turrets · crews bail out and fight on</div>
+    <div id="hint">Cross rivers at bridges · use cover · Tab to take command of another tank</div>
   </div>
-  <script type="importmap">
-    { "imports": { "three": "./vendor/three.module.min.js" } }
-  </script>
-  <script type="module" src="./game.js"></script>
+
+  <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+  <script type="module" src="./setup.js"></script>
 </body>
 </html>
