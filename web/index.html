@@ -44,6 +44,9 @@
     .urow .ustep button:hover { border-color: var(--accent); color: var(--accent); }
     .urow .ucount { min-width: 22px; text-align: center; color: var(--accent); font-weight: 700; }
     .caphint { font-size: 11px; opacity: .6; margin-bottom: 6px; }
+    #pal-terrain { flex-direction: row; flex-wrap: wrap; }
+    .tchip { padding: 8px 12px; border: 1px solid var(--edge); border-radius: 6px; background: #10140d; cursor: pointer; font-size: 12.5px; }
+    .tchip.sel { outline: 2px solid var(--accent); color: var(--accent); }
     .mapwrap { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
     .mini { border: 1px solid var(--edge); border-radius: 8px; background: #0e120b; cursor: crosshair; touch-action: none; }
     .mapside { font-size: 12px; line-height: 1.7; opacity: .85; max-width: 300px; }
@@ -91,6 +94,7 @@
         <div class="tab active" data-tab="battlefield">BATTLEFIELD</div>
         <div class="tab" data-tab="allies">ALLIES</div>
         <div class="tab" data-tab="axis">AXIS</div>
+        <div class="tab" data-tab="terrain">TERRAIN</div>
       </div>
 
       <div class="panel active" data-panel="battlefield">
@@ -128,6 +132,18 @@
             <p>Deploy <b class="zone-axis">Axis</b> armour in the <b class="zone-axis">northern</b> (upper) half. Pick a tank above, then click the map to place it.</p>
             <p style="margin-top:10px">Deployed: <span class="cnt" id="cnt-axis">0</span></p>
             <p style="margin-top:8px"><button class="btn" id="clr-axis">CLEAR</button> <button class="btn" id="auto-axis">AUTO 5</button></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" data-panel="terrain">
+        <div class="palette" id="pal-terrain"></div>
+        <div class="mapwrap">
+          <canvas id="map-terrain" class="mini" width="280" height="280"></canvas>
+          <div class="mapside">
+            <p>Pick a structure/object above, then click the field to add it. These are placed <b>in addition</b> to the terrain the chosen location already generates.</p>
+            <p style="margin-top:10px">Added: <span class="cnt" id="cnt-terrain">0</span></p>
+            <p style="margin-top:8px"><button class="btn" id="clr-terrain">CLEAR</button></p>
           </div>
         </div>
       </div>

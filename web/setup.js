@@ -113,6 +113,45 @@ function makeDeployer(team, canvasId, palId, cntId, clrId, autoId, autoN) {
 const alliesDep = makeDeployer("allies", "map-allies", "pal-allies", "cnt-allies", "clr-allies", "auto-allies", 4);
 const axisDep = makeDeployer("germans", "map-axis", "pal-axis", "cnt-axis", "clr-axis", "auto-axis", 5);
 
+// ---- terrain editor: add structures/objects anywhere on the field ----------
+const OBJ_TYPES = [
+  ["building", "Building", "#b2a184"], ["ruin", "Ruin", "#9a8f7c"], ["tree", "Tree", "#3a6b32"],
+  ["rock", "Rock", "#8a8a82"], ["hedgehog", "Hedgehog", "#555a5e"], ["wire", "Barbed Wire", "#6a6a6a"],
+];
+function makeTerrainEditor() {
+  const canvas = document.getElementById("map-terrain"), ctx = canvas.getContext("2d"), size = canvas.width;
+  const pal = document.getElementById("pal-terrain"); let sel = OBJ_TYPES[0][0]; const props = [];
+  const colorOf = (k) => (OBJ_TYPES.find((t) => t[0] === k) || [])[2] || "#ccc";
+  OBJ_TYPES.forEach(([key, label], i) => {
+    const c = document.createElement("div"); c.className = "tchip" + (i === 0 ? " sel" : ""); c.textContent = label;
+    c.onclick = () => { sel = key; pal.querySelectorAll(".tchip").forEach((x) => x.classList.remove("sel")); c.classList.add("sel"); };
+    pal.appendChild(c);
+  });
+  const w2px = (x) => (x / WORLD * 0.5 + 0.5) * size, w2py = (z) => (0.5 - z / WORLD * 0.5) * size;
+  const px2x = (px) => (px / size - 0.5) * 2 * WORLD, py2z = (py) => (0.5 - py / size) * 2 * WORLD;
+  function draw() {
+    ctx.clearRect(0, 0, size, size); ctx.fillStyle = "#141a10"; ctx.fillRect(0, 0, size, size);
+    if (LOCATIONS[selLoc.value].river) {
+      const y1 = w2py(18), y2 = w2py(6);
+      ctx.fillStyle = "rgba(60,110,150,.5)"; ctx.fillRect(0, y1, size, y2 - y1);
+      ctx.fillStyle = "#6b4f32"; for (const bx of [-32, 26]) ctx.fillRect(w2px(bx) - 7, y1, 14, y2 - y1);
+    }
+    ctx.strokeStyle = "rgba(255,255,255,.12)"; ctx.beginPath(); ctx.moveTo(0, size / 2); ctx.lineTo(size, size / 2); ctx.stroke();
+    for (const p of props) { ctx.fillStyle = colorOf(p.type); ctx.fillRect(w2px(p.x) - 4, w2py(p.z) - 4, 8, 8); }
+    document.getElementById("cnt-terrain").textContent = props.length;
+  }
+  canvas.addEventListener("pointerdown", (e) => {
+    if (props.length >= 40) return;
+    const r = canvas.getBoundingClientRect();
+    props.push({ type: sel, x: Math.round(cl(px2x(e.clientX - r.left))), z: Math.round(cl(py2z(e.clientY - r.top))) });
+    draw();
+  });
+  document.getElementById("clr-terrain").onclick = () => { props.length = 0; draw(); };
+  selLoc.addEventListener("change", draw); draw();
+  return { props };
+}
+const terrainEd = makeTerrainEditor();
+
 function summary() {
   document.getElementById("foot-summary").textContent =
     `${LOCATIONS[selLoc.value].name} · ${WEATHER[selWx.value].name} · Allies ${alliesDep.count()} vs Axis ${axisDep.count()} (max ${CAP}/side)`;
@@ -125,7 +164,8 @@ const $ = (id) => document.getElementById(id);
 
 function buildConfig() {
   return { location: selLoc.value, weather: selWx.value,
-    allies: { tanks: alliesDep.placed.slice() }, axis: { tanks: axisDep.placed.slice() } };
+    allies: { tanks: alliesDep.placed.slice() }, axis: { tanks: axisDep.placed.slice() },
+    props: terrainEd.props.slice() };
 }
 function show(setupVisible) {
   $("setup").style.display = setupVisible ? "flex" : "none";
@@ -170,7 +210,7 @@ $("help").addEventListener("click", (e) => {
 window.__setup = {
   start: startBattle, leave: leaveToSetup, restart,
   pause: () => { if (gameHandle) gameHandle.togglePause(); syncPause(); return gameHandle && gameHandle.paused; },
-  allies: alliesDep, axis: axisDep,
+  allies: alliesDep, axis: axisDep, terrain: terrainEd,
   setLocation: (l) => { selLoc.value = l; describe(); }, setWeather: (w) => { selWx.value = w; },
   get handle() { return gameHandle; },
 };

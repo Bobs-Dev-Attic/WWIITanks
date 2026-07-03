@@ -13,7 +13,7 @@
 
 import * as THREE from "three";
 
-export const VERSION = "0.4.0";
+export const VERSION = "0.5.0";
 
 // ---------------------------------------------------------------------------
 // Configuration catalogues (shared with the setup UI)
@@ -324,13 +324,28 @@ export function startGame(config) {
     }
   }
 
-  function resolveObstacles(pos, rr, infantry) {
+  // What a given tank can simply drive through, toppling it.
+  function crushableBy(o, tank) {
+    if (!tank) return false;
+    if (o.type === "tree" || o.type === "crate") return true;   // knocked flat by any tank
+    if (o.type === "hedgehog") return !!tank.big;                // only heavies shove these aside
+    return false;
+  }
+  function crush(o, tank) { destroyObstacle(o); if (tank) tank.speed *= 0.55; }
+  function flattenWire(o) { if (o.destroyed) return; o.destroyed = true; spawnChips(o.pos.clone().setY(0.6), o.chip, 6, 3); scene.remove(o.group); }
+
+  // Push a moving circle out of solid obstacles. If `crusher` is a tank that can
+  // knock the obstacle over, it drives through and topples it instead of stopping.
+  function resolveObstacles(pos, rr, infantry, crusher) {
     for (const o of obstacles) {
       if (o.destroyed || o.radius <= 0) continue;
       if (o.type === "wire") continue; // handled separately
       if (!o.solid && !(infantry && o.infantry)) continue;
       const dx = pos.x - o.pos.x, dz = pos.z - o.pos.z, dist = Math.hypot(dx, dz), min = o.radius + rr;
-      if (dist < min && dist > 1e-3) { const push = min - dist; pos.x += (dx / dist) * push; pos.z += (dz / dist) * push; }
+      if (dist < min && dist > 1e-3) {
+        if (crusher && crushableBy(o, crusher)) { crush(o, crusher); continue; }
+        const push = min - dist; pos.x += (dx / dist) * push; pos.z += (dz / dist) * push;
+      }
     }
   }
   // barbed wire: block + hurt infantry crossing
@@ -365,6 +380,16 @@ export function startGame(config) {
     // anti-tank belt + wire near the river / mid-field
     for (let i = 0; i < 10; i++) put(makeHedgehog, 4);
     for (let i = 0; i < 6; i++) { const s = spot(8); if (s) makeWire(s[0], s[1], rand(6, 12), rand(0, 3.14)); }
+    // user-placed structures/objects (added on top of the generated terrain)
+    for (const p of (config.props || [])) {
+      const x = clamp(p.x, -90, 90), z = clamp(p.z, -90, 90);
+      if (p.type === "building") makeBuilding(x, z);
+      else if (p.type === "ruin") makeRuin(x, z);
+      else if (p.type === "tree") makeTree(x, z);
+      else if (p.type === "rock") makeRock(x, z);
+      else if (p.type === "hedgehog") makeHedgehog(x, z);
+      else if (p.type === "wire") makeWire(x, z, 9, p.a || 0);
+    }
   }
   seedEnvironment();
 
@@ -759,7 +784,8 @@ export function startGame(config) {
     const prev = t.group.position.clone();
     const np = prev.clone().addScaledVector(fwd, t.speed * dt);
     np.x = clamp(np.x, -BOUND, BOUND); np.z = clamp(np.z, -BOUND, BOUND); np.y = 0;
-    resolveObstacles(np, t.radius, false);
+    resolveObstacles(np, t.radius, false, t);            // t crushes what it can, is blocked by the rest
+    const w = wireBlocksInfantry(np); if (w) flattenWire(w); // tanks flatten barbed wire they roll over
     if (inRiver(np) && !onBridge(np)) { t.speed *= 0.2; np.copy(prev); } // blocked by river except at bridges
     t.group.position.copy(np);
   }
@@ -774,17 +800,53 @@ export function startGame(config) {
         t.turretYaw += clamp(step, -max, max); t.turret.rotation.y = t.turretYaw; }
     }
   }
+  // Desired driving heading: head for the target, but route to a bridge when a
+  // river is in the way and steer around solid obstacles we can't drive over.
+  function navHeading(t, targetPos) {
+    const pos = t.group.position;
+    const dir = new THREE.Vector3(targetPos.x - pos.x, 0, targetPos.z - pos.z);
+    if (dir.lengthSq() > 0) dir.normalize();
+
+    if (river) {
+      const mid = (river.z0 + river.z1) / 2;
+      const nearSide = pos.z < mid, targetSide = targetPos.z < mid;
+      if (nearSide !== targetSide) {                       // must cross the river
+        let b = null, bd = Infinity;
+        for (const br of bridges) { const d = Math.abs(br.x - pos.x); if (d < bd) { bd = d; b = br; } }
+        if (b) {
+          if (Math.abs(pos.x - b.x) > b.halfW - 1.2) dir.set(b.x - pos.x, 0, mid - pos.z); // line up with the bridge
+          else dir.set((b.x - pos.x) * 0.25, 0, nearSide ? 1 : -1);                        // drive straight across
+          if (dir.lengthSq() > 0) dir.normalize();
+        }
+      }
+    }
+
+    // repel from solid obstacles the tank cannot simply topple
+    for (const o of obstacles) {
+      if (o.destroyed || o.radius <= 0 || !o.solid || crushableBy(o, t)) continue;
+      const ax = pos.x - o.pos.x, az = pos.z - o.pos.z, d = Math.hypot(ax, az);
+      const range = o.radius + t.radius + 8;
+      if (d < range && d > 0.1) { const w = (range - d) / range * 5 / d; dir.x += ax * w; dir.z += az * w; }
+    }
+    if (dir.lengthSq() > 0) dir.normalize();
+    return Math.atan2(dir.x, dir.z);
+  }
+
   function updateAITank(t, dt) {
     if (!t.alive) return; if (t.cooldown > 0) t.cooldown -= dt;
     const { target, dist } = nearestEnemyEntity(t.group.position, t.team, 220);
     if (!target) { driveTank(t, 0, 0, dt); return; }
     const dx = target.group.position.x - t.group.position.x, dz = target.group.position.z - t.group.position.z;
-    const want = Math.atan2(dx, dz), step = shortAngle(t.yaw, want), steer = clamp(-step * 2, -1, 1);
-    let throttle = 0; if (dist > 36) throttle = 1; else if (dist < 22) throttle = -1;
+    const aimYaw = Math.atan2(dx, dz);                     // turret tracks the target directly
+    const navYaw = navHeading(t, target.group.position);  // hull follows the navigated route
+    const step = shortAngle(t.yaw, navYaw), steer = clamp(-step * 2, -1, 1);
+    let throttle = 1;
+    if (dist < 20) throttle = -1;
+    else if (dist < 32 && Math.abs(step) < deg(35)) throttle = 0.35; // ease off in range, but keep maneuvering
     driveTank(t, throttle, steer, dt);
-    if (!t.turretGone) { const rel = want - t.yaw, s = shortAngle(t.turretYaw, rel);
+    if (!t.turretGone) { const rel = aimYaw - t.yaw, s = shortAngle(t.turretYaw, rel);
       t.turretYaw += clamp(s, -deg(140) * dt, deg(140) * dt); t.turret.rotation.y = t.turretYaw;
-      if (t.cooldown <= 0 && dist < 85 && Math.abs(shortAngle(t.yaw + t.turretYaw, want)) < deg(8)) fireTank(t); }
+      if (t.cooldown <= 0 && dist < 85 && Math.abs(shortAngle(t.yaw + t.turretYaw, aimYaw)) < deg(8)) fireTank(t); }
   }
 
   // ===========================================================================

@@ -54,6 +54,13 @@ The web build has since grown well beyond the MVP with these battlefield systems
 - **Tank types & rosters** — Light/Medium/Heavy per faction (Stuart/Sherman/
   Pershing vs Panzer II/Panzer IV/Tiger), each with distinct armour, speed, and
   gun, deployed from the setup minimaps.
+- **Navigating AI** — AI tanks route to and cross **bridges** to reach the
+  enemy, steer around solid obstacles (buildings, ruins, rocks, and — for all
+  but heavies — anti-tank hedgehogs), and **drive straight through** what they
+  can knock over (trees, crates, barbed wire; heavies also flatten hedgehogs).
+- **Terrain editor** — a setup **Terrain** tab to add your own buildings, ruins,
+  trees, rocks, hedgehogs, and barbed wire anywhere on the field, on top of the
+  location's generated terrain.
 
 ---
 
