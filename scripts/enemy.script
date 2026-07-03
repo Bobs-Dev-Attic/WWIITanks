@@ -1,0 +1,99 @@
+-- German enemy tank AI.
+--
+-- Behaviour: rotate the hull to face the player, close to firing range, then
+-- hold and shell the player on a cooldown. Whole-body aiming keeps the MVP AI
+-- simple (the enemy turret mesh is fixed to the hull).
+
+local world = require("scripts.world")
+
+local MAX_SPEED    = 6.0
+local ACCEL        = 8.0
+local TURN_RATE    = math.rad(55)
+local ENGAGE_RANGE = 55.0
+local STOP_RANGE   = 32.0
+local FIRE_RANGE   = 60.0
+local FIRE_CONE    = math.rad(12)
+local FIRE_COOLDOWN = 1.8
+local BOUND        = 95.0
+local MAX_HEALTH   = 70
+
+local function shortest_angle(from, to)
+    local d = (to - from) % (2 * math.pi)
+    if d > math.pi then d = d - 2 * math.pi end
+    return d
+end
+
+function init(self)
+    self.yaw      = math.rad(go.get(".", "euler.y"))
+    self.speed    = 0
+    self.cooldown = math.random() * FIRE_COOLDOWN
+    self.health   = MAX_HEALTH
+    self.key      = msg.url()
+
+    world.register(self.key, { url = msg.url(), team = "germans", radius = 1.8 })
+    go.set_rotation(vmath.quat_rotation_y(self.yaw))
+end
+
+function final(self)
+    world.unregister(self.key)
+end
+
+function update(self, dt)
+    if self.cooldown > 0 then self.cooldown = self.cooldown - dt end
+
+    local pos = go.get_position()
+    local target, dist = world.nearest_enemy(pos, "germans", math.huge)
+    if not target then
+        -- no player alive: idle
+        self.speed = math.max(0, self.speed - ACCEL * dt)
+        return
+    end
+
+    local tpos = go.get_position(target.url)
+    local dx, dz = tpos.x - pos.x, tpos.z - pos.z
+    local want_yaw = math.atan2(dx, dz)
+
+    -- turn toward the player
+    local step = shortest_angle(self.yaw, want_yaw)
+    local maxstep = TURN_RATE * dt
+    if step >  maxstep then step =  maxstep end
+    if step < -maxstep then step = -maxstep end
+    self.yaw = self.yaw + step
+    go.set_rotation(vmath.quat_rotation_y(self.yaw))
+
+    -- advance / hold
+    if dist > STOP_RANGE and dist < ENGAGE_RANGE + 40 then
+        self.speed = math.min(MAX_SPEED, self.speed + ACCEL * dt)
+    else
+        self.speed = math.max(0, self.speed - ACCEL * dt)
+    end
+
+    local forward = vmath.vector3(math.sin(self.yaw), 0, math.cos(self.yaw))
+    local np = pos + forward * self.speed * dt
+    np.x = math.max(-BOUND, math.min(BOUND, np.x))
+    np.z = math.max(-BOUND, math.min(BOUND, np.z))
+    np.y = 0
+    go.set_position(np)
+
+    -- fire when lined up and in range
+    if self.cooldown <= 0 and dist < FIRE_RANGE and math.abs(step) < FIRE_CONE then
+        self.cooldown = FIRE_COOLDOWN
+        local dir = vmath.rotate(vmath.quat_rotation_y(self.yaw), vmath.vector3(0, 0, 1))
+        local muzzle = pos + vmath.vector3(0, 1.35, 0) + dir * 3.4
+        local id = factory.create("/spawns#shell_factory", muzzle,
+            vmath.quat_rotation_y(self.yaw))
+        msg.post(msg.url(nil, id, "shell"), "launch", { dir = dir, team = "germans" })
+    end
+end
+
+function on_message(self, message_id, message)
+    if message_id == hash("damage") then
+        self.health = self.health - message.amount
+        if self.health <= 0 then
+            world.unregister(self.key)
+            factory.create("/spawns#blast_factory", go.get_position() + vmath.vector3(0, 1, 0))
+            msg.post("/hud#hud", "enemy_killed", {})
+            go.delete()
+        end
+    end
+end

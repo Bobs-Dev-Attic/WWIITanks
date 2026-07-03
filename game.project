@@ -1,0 +1,36 @@
+[project]
+title = WWII Tanks
+version = 0.1.0
+developer = bobs-dev-attic
+
+[bootstrap]
+main_collection = /main/main.collectionc
+render = /main/tanks.renderc
+
+[display]
+width = 1280
+height = 720
+high_dpi = 1
+clear_color_red = 0.45
+clear_color_green = 0.6
+clear_color_blue = 0.78
+
+[input]
+game_binding = /input/game.input_bindingc
+use_accelerometer = 0
+
+[physics]
+type = 2D
+gravity_y = 0
+scale = 1
+
+[script]
+shared_state = 1
+
+[html5]
+htmlfile = /builtins/manifests/web/engine_template.html
+scale_mode = fit
+
+[graphics]
+default_texture_min_filter = nearest
+default_texture_mag_filter = nearest

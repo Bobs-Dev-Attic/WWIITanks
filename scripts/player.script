@@ -1,0 +1,128 @@
+-- Player tank: arcade-realistic hull physics + firing.
+--
+-- Controls
+--   W / S : accelerate forward / reverse
+--   A / D : steer (pivot) the hull
+--   Mouse : aim the turret (handled by turret.script via the camera aim point)
+--   LMB / SPACE : fire the main gun
+--
+-- The turret is a separate game object ("turret") so it can track the cursor
+-- independently of the hull heading; this script owns the hull and the gun.
+
+local world = require("scripts.world")
+
+local MAX_FWD      = 12.0    -- m/s
+local MAX_REV      = 5.0
+local ACCEL        = 14.0    -- m/s^2
+local BRAKE        = 20.0
+local FRICTION     = 7.0
+local TURN_RATE    = math.rad(75)   -- rad/s
+local BOUND        = 95.0
+local FIRE_COOLDOWN = 0.9
+local RECOIL       = 3.0
+local MAX_HEALTH   = 100
+
+function init(self)
+    msg.post(".", "acquire_input_focus")
+
+    self.speed   = 0
+    self.yaw     = 0
+    self.throttle = 0     -- -1 reverse, 0 coast, 1 forward
+    self.steer    = 0     -- -1 left, +1 right
+    self.cooldown = 0
+    self.health   = MAX_HEALTH
+    self.dead     = false
+
+    self.key = msg.url()
+    world.register(self.key, { url = msg.url(), team = "allies", radius = 1.8 })
+
+    go.set_rotation(vmath.quat_rotation_y(self.yaw))
+    msg.post("/hud#hud", "set_health", { health = self.health, max = MAX_HEALTH })
+end
+
+function final(self)
+    world.unregister(self.key)
+end
+
+function update(self, dt)
+    if self.dead then return end
+    if self.cooldown > 0 then self.cooldown = self.cooldown - dt end
+
+    -- longitudinal physics
+    if self.throttle > 0 then
+        self.speed = self.speed + ACCEL * dt
+    elseif self.throttle < 0 then
+        self.speed = self.speed - BRAKE * dt
+    else
+        -- coast to a stop
+        if self.speed > 0 then
+            self.speed = math.max(0, self.speed - FRICTION * dt)
+        elseif self.speed < 0 then
+            self.speed = math.min(0, self.speed + FRICTION * dt)
+        end
+    end
+    if self.speed >  MAX_FWD then self.speed =  MAX_FWD end
+    if self.speed < -MAX_REV then self.speed = -MAX_REV end
+
+    -- steering (tanks can pivot in place, but turn faster while rolling)
+    if self.steer ~= 0 then
+        local grip = 0.4 + 0.6 * math.min(1, math.abs(self.speed) / MAX_FWD)
+        self.yaw = self.yaw - self.steer * TURN_RATE * grip * dt
+        go.set_rotation(vmath.quat_rotation_y(self.yaw))
+    end
+
+    -- integrate position along the hull heading
+    local forward = vmath.vector3(math.sin(self.yaw), 0, math.cos(self.yaw))
+    local pos = go.get_position() + forward * self.speed * dt
+    pos.x = math.max(-BOUND, math.min(BOUND, pos.x))
+    pos.z = math.max(-BOUND, math.min(BOUND, pos.z))
+    pos.y = 0
+    go.set_position(pos)
+end
+
+local function fire(self)
+    if self.dead or self.cooldown > 0 then return end
+    self.cooldown = FIRE_COOLDOWN
+
+    -- use the turret's world orientation for the shot direction
+    local ok, trot = pcall(go.get_rotation, "/turret")
+    local rot = ok and trot or vmath.quat_rotation_y(self.yaw)
+    local dir = vmath.rotate(rot, vmath.vector3(0, 0, 1))
+
+    local muzzle = go.get_position() + vmath.vector3(0, 1.35, 0) + dir * 3.4
+    local id = factory.create("/spawns#shell_factory", muzzle,
+        vmath.quat_rotation_y(math.atan2(dir.x, dir.z)))
+    msg.post(msg.url(nil, id, "shell"), "launch", { dir = dir, team = "allies" })
+
+    -- recoil kick
+    self.speed = self.speed - RECOIL
+    msg.post("/camera#camera", "shake", { amount = 0.4 })
+end
+
+function on_message(self, message_id, message)
+    if message_id == hash("damage") then
+        self.health = self.health - message.amount
+        msg.post("/hud#hud", "set_health", { health = math.max(0, self.health), max = MAX_HEALTH })
+        if self.health <= 0 and not self.dead then
+            self.dead = true
+            world.unregister(self.key)
+            factory.create("/spawns#blast_factory", go.get_position() + vmath.vector3(0, 1, 0))
+            msg.post("/hud#hud", "game_over", { win = false })
+            -- leave a smoking wreck in place; controls are disabled above
+        end
+    end
+end
+
+function on_input(self, action_id, action)
+    if action_id == hash("drive_fwd") then
+        self.throttle = action.released and 0 or 1
+    elseif action_id == hash("drive_back") then
+        self.throttle = action.released and 0 or -1
+    elseif action_id == hash("steer_left") then
+        self.steer = action.released and 0 or -1
+    elseif action_id == hash("steer_right") then
+        self.steer = action.released and 0 or 1
+    elseif action_id == hash("fire") and action.pressed then
+        fire(self)
+    end
+end

@@ -1,0 +1,3 @@
+mesh: "/props/shell.gltf"
+material: "/materials/tank.material"
+textures: "/textures/shell.png"

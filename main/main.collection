@@ -1,0 +1,100 @@
+name: "main"
+scale_along_z: 0
+instances {
+  id: "ground"
+  prototype: "/main/ground.go"
+  position { x: 0.0 y: 0.0 z: 0.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+  scale3 { x: 1.0 y: 1.0 z: 1.0 }
+}
+instances {
+  id: "camera"
+  prototype: "/main/camera.go"
+  position { x: 0.0 y: 0.0 z: 0.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+  scale3 { x: 1.0 y: 1.0 z: 1.0 }
+}
+instances {
+  id: "spawns"
+  prototype: "/main/spawns.go"
+  position { x: 0.0 y: 0.0 z: 0.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+  scale3 { x: 1.0 y: 1.0 z: 1.0 }
+}
+instances {
+  id: "hud"
+  prototype: "/main/hud.go"
+  position { x: 0.0 y: 0.0 z: 0.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+  scale3 { x: 1.0 y: 1.0 z: 1.0 }
+}
+instances {
+  id: "player"
+  prototype: "/main/us_tank.go"
+  position { x: 0.0 y: 0.0 z: -45.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+  scale3 { x: 1.0 y: 1.0 z: 1.0 }
+}
+instances {
+  id: "turret"
+  prototype: "/main/us_turret.go"
+  position { x: 0.0 y: 1.0 z: -45.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+  scale3 { x: 1.0 y: 1.0 z: 1.0 }
+}
+instances {
+  id: "enemy0"
+  prototype: "/main/de_tank.go"
+  position { x: -20.0 y: 0.0 z: 40.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+  scale3 { x: 1.0 y: 1.0 z: 1.0 }
+}
+instances {
+  id: "enemy1"
+  prototype: "/main/de_tank.go"
+  position { x: 22.0 y: 0.0 z: 46.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+  scale3 { x: 1.0 y: 1.0 z: 1.0 }
+}
+instances {
+  id: "enemy2"
+  prototype: "/main/de_tank.go"
+  position { x: -8.0 y: 0.0 z: 62.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+  scale3 { x: 1.0 y: 1.0 z: 1.0 }
+}
+instances {
+  id: "enemy3"
+  prototype: "/main/de_tank.go"
+  position { x: 15.0 y: 0.0 z: 66.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+  scale3 { x: 1.0 y: 1.0 z: 1.0 }
+}
+instances {
+  id: "cover0"
+  prototype: "/main/cover.go"
+  position { x: -32.0 y: 0.0 z: 5.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+  scale3 { x: 1.0 y: 1.0 z: 1.0 }
+}
+instances {
+  id: "cover1"
+  prototype: "/main/cover.go"
+  position { x: 30.0 y: 0.0 z: 18.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+  scale3 { x: 1.4 y: 1.0 z: 1.0 }
+}
+instances {
+  id: "cover2"
+  prototype: "/main/cover.go"
+  position { x: 4.0 y: 0.0 z: 28.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+  scale3 { x: 1.0 y: 1.2 z: 1.0 }
+}
+instances {
+  id: "cover3"
+  prototype: "/main/cover.go"
+  position { x: -18.0 y: 0.0 z: -12.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+  scale3 { x: 1.0 y: 1.0 z: 1.6 }
+}

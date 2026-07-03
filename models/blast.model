@@ -1,0 +1,3 @@
+mesh: "/props/blast.gltf"
+material: "/materials/tank.material"
+textures: "/textures/fire.png"

@@ -1,0 +1,71 @@
+-- 3D render script for the WWII Tanks project.
+--
+-- Draws the "model" predicate with depth testing + back-face culling using a
+-- view/projection supplied by the camera script (isometric orthographic),
+-- then a 2D overlay pass for the GUI/text HUD.
+
+local IDENTITY = vmath.matrix4()
+
+function init(self)
+    self.model_pred = render.predicate({ "model" })
+    self.gui_pred   = render.predicate({ "gui" })
+    self.text_pred  = render.predicate({ "text" })
+
+    self.clear_color = vmath.vector4(0.45, 0.6, 0.78, 1.0)
+
+    -- Sensible defaults until the camera sends its first matrices.
+    self.view = vmath.matrix4_look_at(
+        vmath.vector3(30, 40, 30),
+        vmath.vector3(0, 0, 0),
+        vmath.vector3(0, 1, 0))
+    self.projection = vmath.matrix4_orthographic(-30, 30, -18, 18, 0.1, 1000)
+end
+
+function update(self)
+    local w = render.get_window_width()
+    local h = render.get_window_height()
+    if w == 0 or h == 0 then
+        return
+    end
+
+    render.set_depth_mask(true)
+    render.set_stencil_mask(0xff)
+    render.clear({
+        [render.BUFFER_COLOR_BIT]   = self.clear_color,
+        [render.BUFFER_DEPTH_BIT]   = 1,
+        [render.BUFFER_STENCIL_BIT] = 0,
+    })
+
+    render.set_viewport(0, 0, w, h)
+
+    -- ---- 3D pass -------------------------------------------------------
+    render.set_view(self.view)
+    render.set_projection(self.projection)
+
+    render.set_depth_mask(true)
+    render.enable_state(render.STATE_DEPTH_TEST)
+    render.enable_state(render.STATE_CULL_FACE)
+    render.disable_state(render.STATE_BLEND)
+    render.draw(self.model_pred)
+    render.disable_state(render.STATE_CULL_FACE)
+    render.disable_state(render.STATE_DEPTH_TEST)
+
+    -- ---- 2D / HUD pass -------------------------------------------------
+    render.set_view(IDENTITY)
+    render.set_projection(vmath.matrix4_orthographic(0, w, 0, h, -1, 1))
+
+    render.set_depth_mask(false)
+    render.enable_state(render.STATE_BLEND)
+    render.set_blend_func(render.BLEND_SRC_ALPHA, render.BLEND_ONE_MINUS_SRC_ALPHA)
+    render.draw(self.text_pred)
+    render.draw(self.gui_pred)
+end
+
+function on_message(self, message_id, message)
+    if message_id == hash("set_view_projection") then
+        self.view = message.view
+        self.projection = message.projection
+    elseif message_id == hash("clear_color") then
+        self.clear_color = message.color
+    end
+end

@@ -1,0 +1,3 @@
+mesh: "/tanks/turret_us.gltf"
+material: "/materials/tank.material"
+textures: "/textures/olive.png"

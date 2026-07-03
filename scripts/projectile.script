@@ -1,0 +1,51 @@
+-- Main-gun shell. Flies straight at high speed; resolves hits against the
+-- shared tank registry (see world.lua) rather than the physics engine, then
+-- spawns an explosion and applies damage.
+
+local world = require("scripts.world")
+
+local SPEED   = 75.0
+local LIFE    = 2.5
+local DAMAGE  = 34
+local RADIUS  = 0.6
+local BOUND   = 100.0
+
+function init(self)
+    self.dir     = nil        -- set by the "launch" message
+    self.team    = "neutral"
+    self.life    = LIFE
+    self.armed   = false
+end
+
+function update(self, dt)
+    if not self.armed then return end
+
+    self.life = self.life - dt
+    local pos = go.get_position() + self.dir * SPEED * dt
+    go.set_position(pos)
+
+    local hit = world.hit_test(pos, self.team, RADIUS)
+    if hit then
+        msg.post(hit.url, "damage", { amount = DAMAGE })
+        self:detonate(pos)
+        return
+    end
+
+    if self.life <= 0 or pos.y < 0
+       or math.abs(pos.x) > BOUND or math.abs(pos.z) > BOUND then
+        self:detonate(pos)
+    end
+end
+
+function detonate(self, pos)
+    factory.create("/spawns#blast_factory", pos)
+    go.delete()
+end
+
+function on_message(self, message_id, message)
+    if message_id == hash("launch") then
+        self.dir  = vmath.normalize(message.dir)
+        self.team = message.team or "neutral"
+        self.armed = true
+    end
+end

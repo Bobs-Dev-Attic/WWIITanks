@@ -1,0 +1,3 @@
+mesh: "/props/ground.gltf"
+material: "/materials/tank.material"
+textures: "/textures/ground.png"

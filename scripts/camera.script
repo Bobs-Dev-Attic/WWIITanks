@@ -1,0 +1,166 @@
+-- Isometric orthographic camera.
+--
+-- * Right mouse drag  -> orbit (azimuth + pitch)
+-- * Middle mouse drag -> pan the focus point across the battlefield
+-- * Mouse wheel       -> zoom (orthographic size)
+-- * Q/E/R/F keys      -> pan (keyboard fallback)
+--
+-- The camera follows the player tank, feeds view/projection to the render
+-- script, and every frame unprojects the mouse cursor onto the ground plane
+-- and hands that "aim point" to the player so the turret can track the cursor.
+
+go.property("follow_lerp", 0.12)
+
+local ROT_SPEED  = 0.006
+local PAN_SPEED  = 0.05
+local KEY_PAN    = 40      -- world units / second
+local ZOOM_STEP  = 1.12
+local MIN_SIZE   = 8
+local MAX_SIZE   = 60
+local PITCH_MIN  = math.rad(15)
+local PITCH_MAX  = math.rad(80)
+
+local function clamp(v, lo, hi)
+    if v < lo then return lo elseif v > hi then return hi else return v end
+end
+
+function init(self)
+    msg.post(".", "acquire_input_focus")
+
+    self.azimuth   = math.rad(45)
+    self.pitch     = math.rad(35.264)   -- classic isometric angle
+    self.distance  = 120
+    self.size      = 22                 -- orthographic half-height (zoom)
+
+    self.focus     = vmath.vector3(0, 0, 0)   -- point the camera looks at
+    self.pan       = vmath.vector3(0, 0, 0)   -- user pan offset from the player
+
+    self.rotating  = false
+    self.panning   = false
+    self.mouse     = vmath.vector3(0, 0, 0)
+
+    self.width  = sys.get_config_int("display.width", 1280)
+    self.height = sys.get_config_int("display.height", 720)
+
+    self.shake = 0
+
+    self.view = vmath.matrix4()
+    self.projection = vmath.matrix4()
+    self:rebuild(0)
+end
+
+function on_message(self, message_id, message)
+    if message_id == hash("shake") then
+        self.shake = math.min(1.5, self.shake + (message.amount or 0.4))
+    end
+end
+
+-- Rebuild view/projection and publish them + the ground aim point.
+function rebuild(self, dt)
+    -- follow the player if it still exists
+    local ok, ppos = pcall(go.get_position, "/player")
+    if ok then
+        self.focus = vmath.lerp(self.follow_lerp, self.focus, ppos + self.pan)
+    end
+
+    local dir = vmath.vector3(
+        math.cos(self.pitch) * math.sin(self.azimuth),
+        math.sin(self.pitch),
+        math.cos(self.pitch) * math.cos(self.azimuth))
+    local eye = self.focus + dir * self.distance
+
+    if self.shake > 0.001 then
+        self.shake = self.shake * 0.85
+        local s = self.shake
+        eye = eye + vmath.vector3((math.random() - 0.5) * s, (math.random() - 0.5) * s, (math.random() - 0.5) * s)
+    end
+
+    self.view = vmath.matrix4_look_at(eye, self.focus, vmath.vector3(0, 1, 0))
+
+    local aspect = self.width / self.height
+    self.projection = vmath.matrix4_orthographic(
+        -self.size * aspect, self.size * aspect,
+        -self.size, self.size,
+        0.1, 1000)
+
+    msg.post("@render:", "set_view_projection", {
+        view = self.view,
+        projection = self.projection,
+    })
+
+    -- unproject the mouse onto the y=0 plane and send it to the player
+    local aim = self:ground_pick(self.mouse.x, self.mouse.y)
+    if aim then
+        msg.post("/turret#turret", "aim_point", { pos = aim })
+    end
+end
+
+function ground_pick(self, mx, my)
+    local inv = vmath.inv(self.projection * self.view)
+    local nx = (2 * mx / self.width) - 1
+    local ny = (2 * my / self.height) - 1
+
+    local pn = inv * vmath.vector4(nx, ny, -1, 1)
+    local pf = inv * vmath.vector4(nx, ny,  1, 1)
+    if pn.w == 0 or pf.w == 0 then return nil end
+    pn = pn * (1 / pn.w)
+    pf = pf * (1 / pf.w)
+
+    local p0  = vmath.vector3(pn.x, pn.y, pn.z)
+    local dir = vmath.vector3(pf.x - pn.x, pf.y - pn.y, pf.z - pn.z)
+    if math.abs(dir.y) < 1e-6 then return nil end
+    local t = -p0.y / dir.y
+    if t < 0 then return nil end
+    return p0 + dir * t
+end
+
+function update(self, dt)
+    -- keyboard panning (relative to camera azimuth on the ground plane)
+    local right   = vmath.vector3(math.cos(self.azimuth), 0, -math.sin(self.azimuth))
+    local forward = vmath.vector3(math.sin(self.azimuth), 0,  math.cos(self.azimuth))
+    if self.key_pan then
+        self.pan = self.pan + (right * self.key_pan.x + forward * self.key_pan.y) * KEY_PAN * dt
+    end
+    self:rebuild(dt)
+end
+
+function on_input(self, action_id, action)
+    -- track cursor + apply drags
+    if action_id == nil or action_id == hash("cam_rotate") or action_id == hash("cam_pan") then
+        self.mouse = vmath.vector3(action.x, action.y, 0)
+
+        if self.rotating and (action.dx ~= 0 or action.dy ~= 0) then
+            self.azimuth = self.azimuth - action.dx * ROT_SPEED
+            self.pitch   = clamp(self.pitch - action.dy * ROT_SPEED, PITCH_MIN, PITCH_MAX)
+        end
+        if self.panning and (action.dx ~= 0 or action.dy ~= 0) then
+            local right   = vmath.vector3(math.cos(self.azimuth), 0, -math.sin(self.azimuth))
+            local forward = vmath.vector3(math.sin(self.azimuth), 0,  math.cos(self.azimuth))
+            local scale = self.size * PAN_SPEED * 0.1
+            self.pan = self.pan - right * (action.dx * scale) - forward * (action.dy * scale)
+        end
+    end
+
+    if action_id == hash("cam_rotate") then
+        if action.pressed then self.rotating = true elseif action.released then self.rotating = false end
+    elseif action_id == hash("cam_pan") then
+        if action.pressed then self.panning = true elseif action.released then self.panning = false end
+    elseif action_id == hash("zoom_in") and action.pressed then
+        self.size = clamp(self.size / ZOOM_STEP, MIN_SIZE, MAX_SIZE)
+    elseif action_id == hash("zoom_out") and action.pressed then
+        self.size = clamp(self.size * ZOOM_STEP, MIN_SIZE, MAX_SIZE)
+    end
+
+    -- keyboard pan state (held)
+    local kp = vmath.vector3(0, 0, 0)
+    self.key_pan = self.key_pan or vmath.vector3(0, 0, 0)
+    if action_id == hash("pan_left") then
+        self.key_pan.x = action.released and 0 or -1
+    elseif action_id == hash("pan_right") then
+        self.key_pan.x = action.released and 0 or 1
+    elseif action_id == hash("pan_up") then
+        self.key_pan.y = action.released and 0 or 1
+    elseif action_id == hash("pan_down") then
+        self.key_pan.y = action.released and 0 or -1
+    end
+end

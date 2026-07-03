@@ -1,0 +1,17 @@
+# Defold
+/build/
+/.internal/
+/.editor_settings
+*.projectc
+
+# Build tooling / output
+/.bob/
+/dist/
+
+# Vercel
+/.vercel/
+
+# OS / editor
+.DS_Store
+*.swp
+__pycache__/
