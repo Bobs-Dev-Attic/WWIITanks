@@ -13,7 +13,7 @@
 
 import * as THREE from "three";
 
-export const VERSION = "0.10.0";
+export const VERSION = "0.10.1";
 
 // Half-extent of the playable battlefield (world units). Shared with the setup
 // minimaps so deployment coordinates line up with the in-game bounds.
@@ -629,6 +629,14 @@ export function startGame(config) {
     cam.pan.set(0, 0, 0);
     banner(`CONTROL: ${controlled.name}`, 1.2);
   }
+  // take command of the nearest surviving friendly tank (used when yours is knocked out)
+  function controlNearest(fromPos) {
+    let best = null, bd = Infinity;
+    for (const a of allyTanks) { if (!a.alive) continue; const d = a.group.position.distanceTo(fromPos); if (d < bd) { bd = d; best = a; } }
+    controlled = best;
+    cam.pan.set(0, 0, 0);
+    if (best) banner(`CONTROL: ${best.name}`, 1.4);
+  }
 
   // ===========================================================================
   // Crew: bail out, seek cover, go prone, fight (rifles/pistols/grenades)
@@ -987,7 +995,7 @@ export function startGame(config) {
     if (t.team === TEAM.GERMANS) { enemiesLeft = Math.max(0, enemiesLeft - 1); if (enemiesLeft === 0) banner("VICTORY", 0, true, "All Axis armour knocked out"); }
     else {
       alliesLeft = Math.max(0, alliesLeft - 1);
-      if (t === controlled) cycleControl(1);
+      if (t === controlled) controlNearest(t.group.position);
       if (alliesLeft === 0) banner("DEFEAT", 0, false, "All Allied armour knocked out");
     }
     updateHUD();
@@ -1336,6 +1344,7 @@ export function startGame(config) {
     smokeNow() { if (controlled) deploySmoke(controlled); },
     terrainBlocksAt(ax, az, bx, bz) { return terrainBlocks({ x: ax, z: az }, { x: bx, z: bz }); },
     get support() { return support; }, get muns() { return muns; }, get aircraft() { return aircraft; },
+    disableControlled() { if (controlled) disableTank(controlled); },
     callArty(x, z, team) { return callArtillery(team || TEAM.ALLIES, new THREE.Vector3(x, 0, z)); },
     callAirstrike(x, z, team) { return callAir(team || TEAM.ALLIES, new THREE.Vector3(x, 0, z)); },
     testFacing(idx, where) { const tk = tanks[idx]; if (!tk) return null; const before = tk.health;
