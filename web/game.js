@@ -13,7 +13,7 @@
 
 import * as THREE from "three";
 
-export const VERSION = "0.11.0";
+export const VERSION = "0.12.0";
 
 // Half-extent of the playable battlefield (world units). Shared with the setup
 // minimaps so deployment coordinates line up with the in-game bounds.
@@ -632,6 +632,7 @@ export function startGame(config) {
       yaw: yaw || 0, turretYaw: 0, speed: 0, health: spec.health, maxHealth: spec.health, radius,
       cooldown: 0, reload: spec.reload || 1, maxFwd: spec.maxFwd, dmg: spec.dmg || 0, big: !!spec.big, mgCd: 0, smokeCd: 0,
       cls, armored: isTank, mainGun: isTank, mgOnly: !isTank,
+      mass: isTank ? (spec.big ? 2.6 : (spec.maxFwd >= 14 ? 1.2 : 1.7)) : (cls === "apc" ? 1.2 : cls === "jeep" ? 0.5 : 0.35),
       role, bound: tanks.length % 2, smoked: false,
       leftTrackBroken: false, rightTrackBroken: false, turretGone: false, alive: true, disabled: false,
       crewCount: spec.crew != null ? spec.crew : (spec.big ? 4 : 3), hasGrenades: Math.random() < 0.6, bars, hpFill, rlFill, rlBg };
@@ -819,12 +820,15 @@ export function startGame(config) {
   function fireProjectile(from, dir, team, type, dmg, owner, ff) {
     const spec = PROJ[type];
     const mesh = new THREE.Mesh(spec.geo, spec.mat); mesh.position.copy(from); scene.add(mesh);
-    projectiles.push({ mesh, dir: dir.clone().normalize(), team, type, life: spec.life, spec, dmg, owner: owner || null, ff: !!ff, hitObs: new Set() });
+    projectiles.push({ mesh, dir: dir.clone().normalize(), team, type, life: spec.life, spec, dmg, owner: owner || null, ff: !!ff, origin: from.clone(), hitObs: new Set() });
   }
   function fireTank(t) {
     if (!t.mainGun || t.turretGone || t.cooldown > 0 || !t.alive) return false;
     t.cooldown = t.reload;
-    const yaw = t.yaw + t.turretYaw, dir = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+    // gun dispersion — shots aren't laser-perfect (worse for a tank on the move)
+    const spread = deg(1.3) + Math.min(Math.abs(t.speed), t.maxFwd) / t.maxFwd * deg(1.6);
+    const yaw = t.yaw + t.turretYaw + rand(-spread, spread);
+    const dir = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
     const from = t.group.position.clone().add(new THREE.Vector3(0, 1.35, 0)).addScaledVector(dir, 3.6);
     // the player can shoot anything — their shells ignore team (friendly fire)
     fireProjectile(from, dir, t.team, "ap", t.dmg, t, t === controlled);
@@ -842,6 +846,24 @@ export function startGame(config) {
     const muzzle = from.addScaledVector(dir, 3.2);
     fireProjectile(muzzle, dir, t.team, "mg", null, t, ff);
   }
+  // As an AP round reaches a tank, roll its outcome: mostly misses/glances,
+  // graduated partial damage, and a low chance of a clean penetration. Range,
+  // target motion and size shift the odds; soft vehicles are wrecked or missed.
+  function rollShellOutcome(origin, t) {
+    if (t.mgOnly) return Math.random() < 0.25 ? { mult: 0, label: "MISS" } : { mult: 1.3, label: "HIT", pen: true };
+    const range = Math.hypot(t.group.position.x - origin.x, t.group.position.z - origin.z);
+    const missChance = clamp(0.15 + clamp(range / 170, 0, 0.44)
+      + clamp(Math.abs(t.speed) / (t.maxFwd || 12) * 0.2, 0, 0.2)
+      + (t.big ? -0.05 : 0.02), 0.1, 0.7);
+    const r = Math.random();
+    if (r < missChance) return { mult: 0, label: "MISS" };
+    const q = (r - missChance) / (1 - missChance);
+    if (q < 0.30) return { mult: rand(0.12, 0.3), label: "GLANCE", pen: false };   // scratched the armour
+    if (q < 0.62) return { mult: rand(0.45, 0.75), label: "HIT", pen: false };
+    if (q < 0.85) return { mult: rand(0.85, 1.15), label: "SOLID HIT", pen: true };
+    return { mult: rand(1.4, 1.9), label: "PENETRATION!", pen: true };            // rare clean kill-shot
+  }
+
   function updateProjectiles(dt) {
     for (let i = projectiles.length - 1; i >= 0; i--) {
       const s = projectiles[i]; s.life -= dt;
@@ -855,7 +877,16 @@ export function startGame(config) {
         }
       }
       if (!done) for (const t of tanks) { if (!t.alive || t === s.owner) continue; if (!s.ff && t.team === s.team) continue;
-        if (p.distanceTo(t.group.position.clone().setY(1)) < t.radius + 0.5) { hitTank(t, s, p.clone()); explode(p.clone(), s.spec.big); done = true; break; } }
+        if (p.distanceTo(t.group.position.clone().setY(1)) < t.radius + 0.5) {
+          if (s.type === "ap") {
+            const out = rollShellOutcome(s.origin, t);
+            if (out.mult <= 0) { spawnChips(p.clone(), 0xffe08a, 8, 6); explode(p.clone(), false); } // deflect / near miss — sparks, no damage
+            else { s.pen = out.pen; const base = s.dmg != null ? s.dmg : (s.spec.tankDmg || 30);
+                   hitTank(t, s, p.clone(), base * out.mult); explode(p.clone(), s.spec.big); }
+            if (s.owner === controlled) banner(out.label, 0.8);
+          } else { hitTank(t, s, p.clone()); explode(p.clone(), s.spec.big); }
+          done = true; break;
+        } }
       if (!done) for (const c of crews) { if (!c.alive) continue; if (!s.ff && c.team === s.team) continue;
         if (p.distanceTo(c.group.position.clone().setY(0.9)) < 0.7) { hurtCrew(c, s.spec.crewDmg); if (s.spec.big) explode(p.clone()); done = true; break; } }
       if (done || s.life <= 0 || p.y < 0 || Math.abs(p.x) > BOUND + 15 || Math.abs(p.z) > BOUND + 15) {
@@ -1023,14 +1054,15 @@ export function startGame(config) {
     // MG mostly pings off tank armour, but shreds soft-skinned vehicles and crew
     if (proj.type === "mg") { if (t.armored) dmg *= 0.5; spawnChips(hitPos.clone(), 0xffe08a, 3, 3); }
     t.health -= dmg;
-    if (t.armored && heavy && side && local.y < 0.75 && !(local.x < 0 ? t.leftTrackBroken : t.rightTrackBroken) && Math.random() < 0.7) {
+    const pen = proj.pen !== false; // only real penetrations knock off tracks/turrets
+    if (pen && t.armored && heavy && side && local.y < 0.75 && !(local.x < 0 ? t.leftTrackBroken : t.rightTrackBroken) && Math.random() < 0.6) {
       const left = local.x < 0;
       if (left) { t.leftTrackBroken = true; detachAsDebris(t.parts.leftTrack); } else { t.rightTrackBroken = true; detachAsDebris(t.parts.rightTrack); }
       spawnChips(hitPos.clone(), 0x222222, 8, 5);
     }
-    if (t.armored && heavy && !t.turretGone && (high || t.health <= t.maxHealth * 0.35) && Math.random() < (high ? 0.5 : 0.25)) blowTurret(t);
-    if (t.armored && heavy && !high && Math.random() < 0.3 && t.parts.cupola && t.parts.cupola.parent) detachAsDebris(t.parts.cupola, new THREE.Vector3(rand(-2, 2), 4, rand(-2, 2)));
-    if (t.armored && heavy && Math.random() < 0.25 && t.parts.fender && t.parts.fender.parent) detachAsDebris(t.parts.fender, new THREE.Vector3(rand(-3, 3), 2, rand(-3, 3)));
+    if (pen && t.armored && heavy && !t.turretGone && (high || t.health <= t.maxHealth * 0.35) && Math.random() < (high ? 0.5 : 0.25)) blowTurret(t);
+    if (pen && t.armored && heavy && !high && Math.random() < 0.3 && t.parts.cupola && t.parts.cupola.parent) detachAsDebris(t.parts.cupola, new THREE.Vector3(rand(-2, 2), 4, rand(-2, 2)));
+    if (pen && t.armored && heavy && Math.random() < 0.25 && t.parts.fender && t.parts.fender.parent) detachAsDebris(t.parts.fender, new THREE.Vector3(rand(-3, 3), 2, rand(-3, 3)));
     if (t.health <= 0) disableTank(t);
     else if (t === controlled) flashHud();
   }
@@ -1136,6 +1168,17 @@ export function startGame(config) {
     np.x = clamp(np.x, -BOUND, BOUND); np.z = clamp(np.z, -BOUND, BOUND); np.y = 0;
     resolveObstacles(np, t.radius, false, t);            // t crushes what it can, is blocked by the rest
     const w = wireBlocksInfantry(np); if (w) flattenWire(w); // tanks flatten barbed wire they roll over
+    // a moving vehicle is blocked by other vehicles (it yields, rather than bulldozing them)
+    for (const o of tanks) {
+      if (o === t) continue;
+      const dx = np.x - o.group.position.x, dz = np.z - o.group.position.z, d = Math.hypot(dx, dz);
+      const min = (t.radius + o.radius) * 1.02; // block a touch earlier than the global pass fires
+      if (d < min) {
+        if (d > 1e-3) { const push = min - d; np.x += (dx / d) * push; np.z += (dz / d) * push; }
+        else { np.x += rand(-0.4, 0.4); np.z += rand(-0.4, 0.4); }
+        if (Math.abs(t.speed) > 2) t.speed *= 0.5; // the collision bleeds momentum
+      }
+    }
     if (inRiver(np) && !onBridge(np)) { t.speed *= 0.2; np.copy(prev); } // blocked by river except at bridges
     t.group.position.copy(np);
     // kick up dust/track spray while rolling
@@ -1158,16 +1201,19 @@ export function startGame(config) {
   // hard obstacles it was shoved into.
   function separateTanks() {
     const prev = tanks.map((t) => t.group.position.clone()); // valid positions from driveTank
+    // residual-overlap cleanup (driveTank already blocks a mover from overlapping,
+    // so this mainly resolves dense clusters). Heavier tanks yield a little less.
     for (let iter = 0; iter < 4; iter++) {
       for (let i = 0; i < tanks.length; i++) {
         for (let j = i + 1; j < tanks.length; j++) {
-          const a = tanks[i].group.position, b = tanks[j].group.position;
+          const A = tanks[i], B = tanks[j], a = A.group.position, b = B.group.position;
           let dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
-          const min = (tanks[i].radius + tanks[j].radius) * 0.95;
+          const min = (A.radius + B.radius) * 0.9; // fires below driveTank's block, so held pairs aren't nudged
           if (d < min) {
             if (d < 1e-3) { dx = rand(-1, 1); dz = rand(-1, 1); d = Math.hypot(dx, dz) || 1; }
-            const push = (min - d) / 2, nx = dx / d, nz = dz / d;
-            a.x -= nx * push; a.z -= nz * push; b.x += nx * push; b.z += nz * push;
+            const sum = A.mass + B.mass, total = min - d, nx = dx / d, nz = dz / d;
+            a.x -= nx * total * (B.mass / sum); a.z -= nz * total * (B.mass / sum);
+            b.x += nx * total * (A.mass / sum); b.z += nz * total * (A.mass / sum);
           }
         }
       }
@@ -1452,6 +1498,8 @@ export function startGame(config) {
     terrainBlocksAt(ax, az, bx, bz) { return terrainBlocks({ x: ax, z: az }, { x: bx, z: bz }); },
     get support() { return support; }, get muns() { return muns; }, get aircraft() { return aircraft; },
     disableControlled() { if (controlled) disableTank(controlled); },
+    sampleOutcomes(idx, dist, n) { const t = tanks[idx]; const o = { x: t.group.position.x - (dist || 40), z: t.group.position.z };
+      const c = {}; for (let k = 0; k < (n || 1000); k++) { const r = rollShellOutcome(o, t); c[r.label] = (c[r.label] || 0) + 1; } return c; },
     callArty(x, z, team) { return callArtillery(team || TEAM.ALLIES, new THREE.Vector3(x, 0, z)); },
     callAirstrike(x, z, team) { return callAir(team || TEAM.ALLIES, new THREE.Vector3(x, 0, z)); },
     testFacing(idx, where) { const tk = tanks[idx]; if (!tk) return null; const before = tk.health;

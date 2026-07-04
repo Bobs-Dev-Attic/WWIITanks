@@ -67,6 +67,17 @@ The web build has since grown well beyond the MVP with these battlefield systems
   (with sidecar MG). They're fast and **machine-gun armed but unarmoured** — no
   main gun, and MG fire shreds them — so their AI raids, harasses, and dodges
   tanks. You can Tab into and drive them too.
+- **Probabilistic hit quality** — a shell entering a target's collider rolls on
+  a progressive scale: **MISS**, **GLANCE** (a scratch that barely dents the
+  armour), **HIT**, **SOLID HIT**, or a rare **PENETRATION!** — with the chance
+  of a clean direct hit kept deliberately low (~8–10%). Miss odds climb with
+  range and the firer's own speed, so a moving tank shooting on the move is far
+  less accurate. Shots also **disperse** — the gun cone widens the faster you're
+  driving. The controlled tank flashes the outcome (GLANCE / SOLID HIT / …) on
+  each strike.
+- **Solid tank-vs-tank collisions** — vehicles never overlap, and a ramming
+  tank **yields to the one it hits instead of shoving it aside**; separation of
+  any residual pile-up is **mass-weighted**, so a Stuart can't bulldoze a Tiger.
 - **Navigating AI** — AI tanks route to and cross **bridges** to reach the
   enemy, steer around solid obstacles (buildings, ruins, rocks, and — for all
   but heavies — anti-tank hedgehogs), and **drive straight through** what they
