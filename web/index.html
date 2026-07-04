@@ -77,6 +77,23 @@
     #help b { color: var(--accent); }
     #help .btn { margin-top: 16px; padding: 9px 14px; border: 1px solid var(--edge); border-radius: 6px; background: #12160f; color: var(--ink); cursor: pointer; }
 
+    /* ---------- Save / Load overlay ---------- */
+    #slots { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(6,8,6,.72); z-index: 22; }
+    #slots .box { width: min(520px, 92vw); background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 22px 26px; }
+    #slots h2 { color: var(--accent); letter-spacing: 2px; margin-bottom: 14px; }
+    #slots .btn { padding: 8px 13px; border: 1px solid var(--edge); border-radius: 6px; background: #12160f; color: var(--ink); cursor: pointer; font: inherit; font-size: 12.5px; }
+    #slots .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .slot-save { display: flex; gap: 8px; margin-bottom: 8px; }
+    .slot-input { flex: 1; padding: 9px 10px; background: #10140d; color: var(--ink); border: 1px solid var(--edge); border-radius: 6px; font: inherit; }
+    .slot-input:focus { outline: none; border-color: var(--accent); }
+    .slot-msg { font-size: 12px; opacity: .85; min-height: 15px; margin-bottom: 10px; color: var(--accent); }
+    .slot-list { display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow: auto; margin-bottom: 14px; }
+    .slot-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--edge); border-radius: 6px; background: #10140d; }
+    .slot-row .slot-nm { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .slot-row .slot-meta { font-size: 11px; opacity: .6; }
+    .slot-row .slot-del { padding: 6px 9px; }
+    .slot-empty { font-size: 12px; opacity: .6; padding: 8px 2px; }
+
     /* ---------- In-game HUD ---------- */
     #hud { position: fixed; inset: 0; pointer-events: none; color: var(--ink); text-shadow: 0 1px 2px rgba(0,0,0,.85); user-select: none; display: none; }
     #controls { position: absolute; top: 56px; left: 18px; font-size: 13px; line-height: 1.5; opacity: .9; }
@@ -98,6 +115,8 @@
         <div class="right">
           <div class="ver" id="ver">v0.0.0</div>
           <button class="hbtn" id="randomize" title="Randomize all settings">🎲 Randomize</button>
+          <button class="hbtn" id="btn-save" title="Save this setup">💾 Save</button>
+          <button class="hbtn" id="btn-load" title="Load a saved setup">📂 Load</button>
         </div>
       </div>
       <div class="tabs">
@@ -202,6 +221,20 @@
         <li>Your gun can <b>hit anything</b> you aim at — structures, terrain, and tanks/crew of <b>either side</b> (friendly fire is on)</li>
       </ul>
       <button class="btn" data-act="closehelp">CLOSE</button>
+    </div>
+  </div>
+
+  <!-- ===== Save / Load overlay ===== -->
+  <div id="slots">
+    <div class="box">
+      <h2>SAVE / LOAD SETUP</h2>
+      <div class="slot-save" id="slot-save-row">
+        <input id="slot-name" class="slot-input" type="text" placeholder="Name this setup…" maxlength="40" autocomplete="off" />
+        <button class="btn" id="slot-confirm">SAVE</button>
+      </div>
+      <div id="slot-msg" class="slot-msg"></div>
+      <div id="slot-list" class="slot-list"></div>
+      <button class="btn" data-act="closeslots">CLOSE</button>
     </div>
   </div>
 

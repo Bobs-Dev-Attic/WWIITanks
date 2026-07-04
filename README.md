@@ -75,6 +75,12 @@ The web build has since grown well beyond the MVP with these battlefield systems
   less accurate. Shots also **disperse** — the gun cone widens the faster you're
   driving. The controlled tank flashes the outcome (GLANCE / SOLID HIT / …) on
   each strike.
+- **Save / load battlefield setups** — **💾 Save** and **📂 Load** buttons beside
+  Randomize store your fully-configured battle (location, weather, both rosters
+  with their exact minimap placements, terrain props, and fire-support counts)
+  as a named slot in the browser, so it survives reloads and return visits. Load
+  restores everything exactly; you can keep multiple named setups and delete the
+  ones you don't want.
 - **Realistic turret traverse** — each vehicle turns its turret at a
   historically-flavoured powered rate rather than snapping instantly: light
   tanks are quick (Stuart ~40°/s, Panzer II ~36°/s), mediums moderate (Sherman
