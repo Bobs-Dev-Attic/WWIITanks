@@ -13,7 +13,7 @@
 
 import * as THREE from "three";
 
-export const VERSION = "0.12.1";
+export const VERSION = "0.13.0";
 
 // Half-extent of the playable battlefield (world units). Shared with the setup
 // minimaps so deployment coordinates line up with the in-game bounds.
@@ -127,6 +127,15 @@ export function startGame(config) {
     const m = new THREE.Mesh(
       new THREE.BoxGeometry(w, h, d),
       new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: 0.08 })
+    );
+    m.castShadow = true; m.receiveShadow = true;
+    return m;
+  }
+  // low-poly cylinder (road wheels, sprockets) — axis along local Y by default
+  function cyl(r, h, color, seg = 12) {
+    const m = new THREE.Mesh(
+      new THREE.CylinderGeometry(r, r, h, seg),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.08 })
     );
     m.castShadow = true; m.receiveShadow = true;
     return m;
@@ -568,8 +577,46 @@ export function startGame(config) {
     parts.barrel = box(big ? 0.28 : 0.2, big ? 0.28 : 0.2, barrelLen, 0x33352f); parts.barrel.position.set(0, 0.3, barrelLen / 2 + 0.5); turret.add(parts.barrel);
     parts.cupola = box(0.36, 0.22, 0.36, bodyColor); parts.cupola.position.set(0, 0.6, -0.4); turret.add(parts.cupola);
     group.add(turret);
-    return { group, turret, parts };
+
+    // ---- Level-of-detail dressing --------------------------------------------
+    // lodMid: shown once you zoom past the far silhouette; lodNear: fine parts &
+    // animated bits that only appear (and move) when you're zoomed right in.
+    const lodMid = [], lodNear = [], anim = { wheels: [] };
+    const dark = 0x2b2c28, metal = 0x33352f;
+    // hull stowage, exhaust, tools, headlights (medium detail)
+    for (const sx of [-0.5, 0.5]) { const stow = box(0.5, 0.3, 0.55, mixShade(bodyColor, 0.85)); stow.position.set(sx, 0.9, -1.35); group.add(stow); lodMid.push(stow); }
+    const exhaust = box(0.16, 0.16, 0.5, dark); exhaust.position.set(0.78, 0.5, -1.45); group.add(exhaust); lodMid.push(exhaust);
+    anim.exhaust = new THREE.Vector3(0.78, 0.62, -1.72); // local muzzle of the exhaust for smoke
+    for (const sx of [-0.58, 0.58]) { const hl = box(0.14, 0.14, 0.1, 0xffe9a8); hl.position.set(sx, 0.72, 1.62); group.add(hl); lodMid.push(hl); }
+    const spareTrack = box(1.0, 0.12, 0.16, track); spareTrack.position.set(0, 1.06, 1.32); group.add(spareTrack); lodMid.push(spareTrack); // spare links on the glacis
+    // turret dressing: gun mantlet + coaxial MG (medium detail)
+    const mantlet = box(big ? 0.6 : 0.5, big ? 0.5 : 0.42, 0.35, mixShade(bodyColor, 0.9)); mantlet.position.set(0, 0.3, 0.65); turret.add(mantlet); lodMid.push(mantlet);
+    const coax = box(0.08, 0.08, 0.85, metal); coax.position.set(0.3, 0.34, 0.95); turret.add(coax); lodMid.push(coax);
+
+    // road wheels / sprockets / idlers — near detail, and they spin (anim.wheels)
+    const wr = 0.34, wz = [-1.35, -0.68, 0, 0.68, 1.35];
+    // geometry pre-rotated so the axle lies along X — spin via rotation.x rolls them
+    for (const sx of [-1.0, 1.0]) {
+      for (const z of wz) { const w = cyl(wr, 0.16, dark, 10); w.geometry.rotateZ(Math.PI / 2); w.position.set(sx * 1.22, 0.3, z); group.add(w); lodNear.push(w); anim.wheels.push(w); }
+      const spr = cyl(0.3, 0.18, 0x3a3b36, 8); spr.geometry.rotateZ(Math.PI / 2); spr.position.set(sx * 1.22, 0.42, 1.55); group.add(spr); lodNear.push(spr); anim.wheels.push(spr);
+      const idl = cyl(0.3, 0.18, 0x3a3b36, 8); idl.geometry.rotateZ(Math.PI / 2); idl.position.set(sx * 1.22, 0.42, -1.55); group.add(idl); lodNear.push(idl); anim.wheels.push(idl);
+    }
+    // commander in the open cupola hatch (near detail, bobs a little)
+    const commander = new THREE.Group();
+    const head = box(0.22, 0.24, 0.22, 0x6a5b45); head.position.y = 0.2; commander.add(head);
+    const torso = box(0.34, 0.3, 0.3, mixShade(bodyColor, 0.7)); commander.add(torso);
+    commander.position.set(0, 0.78, -0.4); turret.add(commander); lodNear.push(commander); anim.commander = commander;
+    // radio antenna (near detail, sways with speed)
+    const antenna = new THREE.Group();
+    const rod = box(0.03, 2.0, 0.03, 0x1a1a1a); rod.position.y = 1.0; antenna.add(rod);
+    antenna.position.set(-0.55, 0.35, -0.55); turret.add(antenna); lodNear.push(antenna); anim.antenna = antenna;
+
+    for (const m of lodMid) m.visible = false;
+    for (const m of lodNear) m.visible = false;
+    return { group, turret, parts, lodMid, lodNear, anim };
   }
+  // shade a hex colour by a multiplier (for subtle two-tone detail meshes)
+  function mixShade(hex, k) { const c = new THREE.Color(hex); c.multiplyScalar(k); return c.getHex(); }
   function makeBar(color, y, width) {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ color, depthTest: false, depthWrite: false }));
     s.center.set(0, 0.5); s.position.set(-width / 2, y, 0); s.scale.set(width, 0.22, 1); s.renderOrder = 999; return s;
@@ -579,13 +626,17 @@ export function startGame(config) {
   // group here is the pintle/MG mount so the aiming/MG code works unchanged.
   function buildVehicle(cls, color) {
     const group = new THREE.Group(), parts = {}, wheel = 0x1c1c1c, turret = new THREE.Group();
+    const lodMid = [], lodNear = [], anim = { wheels: [] };
+    // a round hub cylinder on a wheel box, revealed & spun only at near zoom
+    const hub = (x, y, z, r) => { const h = cyl(r, 0.22, 0x0d0d0d, 10); h.geometry.rotateZ(Math.PI / 2); h.position.set(x, y, z); group.add(h); lodNear.push(h); anim.wheels.push(h); };
     if (cls === "apc") {
       parts.lower = box(2.0, 0.55, 4.0, color); parts.lower.position.y = 0.55; group.add(parts.lower);
       const cab = box(2.0, 0.5, 1.3, color); cab.position.set(0, 1.0, 1.2); group.add(cab);
       const bed = box(1.7, 0.5, 2.3, color); bed.position.set(0, 1.05, -0.6); group.add(bed); // open troop bay walls
       const wsh = box(1.8, 0.5, 0.08, 0x2b2f33); wsh.position.set(0, 1.15, 1.85); group.add(wsh);
       for (const sx of [-1.02, 1.02]) { const tr = box(0.4, 0.5, 2.2, wheel); tr.position.set(sx, 0.3, -0.7); group.add(tr); } // rear tracks
-      for (const sx of [-0.95, 0.95]) { const w = box(0.4, 0.5, 0.5, wheel); w.position.set(sx, 0.3, 1.5); group.add(w); }        // front wheels
+      for (const sx of [-0.95, 0.95]) { const w = box(0.4, 0.5, 0.5, wheel); w.position.set(sx, 0.3, 1.5); group.add(w); hub(sx, 0.3, 1.5, 0.28); }  // front wheels
+      for (const sx of [-1.06, 1.06]) for (const z of [-1.4, -0.7, 0]) hub(sx, 0.3, z, 0.26); // near: road wheels peeking from the tracks
       turret.position.set(0, 1.35, -0.6);
       const mg = box(0.12, 0.12, 1.1, 0x24201a); mg.position.z = 0.5; turret.add(mg);
       const shield = box(0.7, 0.5, 0.1, color); shield.position.z = -0.1; turret.add(shield);
@@ -593,24 +644,27 @@ export function startGame(config) {
       parts.lower = box(1.5, 0.4, 2.7, color); parts.lower.position.y = 0.5; group.add(parts.lower);
       const hood = box(1.4, 0.35, 0.9, color); hood.position.set(0, 0.72, 0.95); group.add(hood);
       const wsh = box(1.4, 0.5, 0.06, 0x2b2f33); wsh.position.set(0, 0.95, 0.5); group.add(wsh);
-      for (const sx of [-0.8, 0.8]) for (const sz of [-1.05, 1.05]) { const w = box(0.35, 0.55, 0.55, wheel); w.position.set(sx, 0.3, sz); group.add(w); }
+      for (const sx of [-0.8, 0.8]) for (const sz of [-1.05, 1.05]) { const w = box(0.35, 0.55, 0.55, wheel); w.position.set(sx, 0.3, sz); group.add(w); hub(sx, 0.3, sz, 0.3); }
+      for (const sx of [-0.6, 0.6]) { const hl = box(0.12, 0.12, 0.08, 0xffe9a8); hl.position.set(sx, 0.72, 1.42); group.add(hl); lodMid.push(hl); }
       turret.position.set(0, 0.9, -0.7);
       const post = box(0.1, 0.5, 0.1, 0x333333); post.position.y = -0.1; turret.add(post);
       const mg = box(0.1, 0.1, 1.0, 0x24201a); mg.position.set(0, 0.2, 0.45); turret.add(mg);
     } else { // moto
       parts.lower = box(0.35, 0.35, 1.9, color); parts.lower.position.y = 0.55; group.add(parts.lower);
       const seat = box(0.4, 0.2, 0.6, 0x1a1a1a); seat.position.set(0, 0.78, -0.3); group.add(seat);
-      for (const sz of [-0.85, 0.85]) { const w = box(0.18, 0.7, 0.7, wheel); w.position.set(0, 0.35, sz); group.add(w); }
+      for (const sz of [-0.85, 0.85]) { const w = box(0.18, 0.7, 0.7, wheel); w.position.set(0, 0.35, sz); group.add(w); hub(0, 0.35, sz, 0.34); }
       const bar = box(0.7, 0.08, 0.08, 0x222222); bar.position.set(0, 0.95, 0.8); group.add(bar);
-      const rider = box(0.4, 0.7, 0.4, 0x5a5c50); rider.position.set(0, 1.1, -0.2); group.add(rider);
+      const rider = box(0.4, 0.7, 0.4, 0x5a5c50); rider.position.set(0, 1.1, -0.2); group.add(rider); anim.rider = rider;
       const side = box(0.6, 0.4, 1.3, color); side.position.set(0.7, 0.45, -0.1); group.add(side); // sidecar
-      const sw = box(0.16, 0.6, 0.6, wheel); sw.position.set(0.7, 0.32, -0.6); group.add(sw);
+      const sw = box(0.16, 0.6, 0.6, wheel); sw.position.set(0.7, 0.32, -0.6); group.add(sw); hub(0.7, 0.32, -0.6, 0.29);
       turret.position.set(0.7, 0.85, 0.2);
       const mg = box(0.09, 0.09, 0.9, 0x24201a); mg.position.z = 0.4; turret.add(mg);
     }
     group.add(turret);
     group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-    return { group, turret, parts };
+    for (const m of lodMid) m.visible = false;
+    for (const m of lodNear) m.visible = false;
+    return { group, turret, parts, lodMid, lodNear, anim };
   }
 
   function spawnTank(team, typeKey, x, z, yaw) {
@@ -635,7 +689,9 @@ export function startGame(config) {
       mass: isTank ? (spec.big ? 2.6 : (spec.maxFwd >= 14 ? 1.2 : 1.7)) : (cls === "apc" ? 1.2 : cls === "jeep" ? 0.5 : 0.35),
       role, bound: tanks.length % 2, smoked: false,
       leftTrackBroken: false, rightTrackBroken: false, turretGone: false, alive: true, disabled: false,
-      crewCount: spec.crew != null ? spec.crew : (spec.big ? 4 : 3), hasGrenades: Math.random() < 0.6, bars, hpFill, rlFill, rlBg };
+      crewCount: spec.crew != null ? spec.crew : (spec.big ? 4 : 3), hasGrenades: Math.random() < 0.6, bars, hpFill, rlFill, rlBg,
+      lodMid: built.lodMid || [], lodNear: built.lodNear || [], anim: built.anim || null,
+      barrelRestZ: built.parts.barrel ? built.parts.barrel.position.z : 0, recoil: 0, wheelPhase: Math.random() * Math.PI * 2 };
     tanks.push(t); return t;
   }
 
@@ -832,6 +888,7 @@ export function startGame(config) {
     const from = t.group.position.clone().add(new THREE.Vector3(0, 1.35, 0)).addScaledVector(dir, 3.6);
     // the player can shoot anything — their shells ignore team (friendly fire)
     fireProjectile(from, dir, t.team, "ap", t.dmg, t, t === controlled);
+    t.recoil = 1; // gun kicks back, eases forward (visible when zoomed in)
     t.speed -= 3;
     if (t === controlled) cam.shake = Math.min(1.6, cam.shake + 0.5);
     return true;
@@ -1118,6 +1175,55 @@ export function startGame(config) {
   }
   // performance.now without Date (safe)
   let _t0 = 0; function performance_now() { return _t0; }
+
+  // ===========================================================================
+  // Level of detail — reveal fine models + animation as the player zooms in.
+  // cam.size is the orthographic half-height: small = zoomed in, large = out.
+  // ===========================================================================
+  const LOD_NEAR = 24, LOD_MID = 58, LOD_HYST = 6; // switch bands (with hysteresis)
+  let lodLevel = -1;
+  function targetLOD() {
+    const s = cam.size;
+    const near = LOD_NEAR + (lodLevel === 2 ? LOD_HYST : 0);
+    const mid = LOD_MID + (lodLevel >= 1 ? LOD_HYST : 0);
+    if (s < near) return 2;   // zoomed right in: fine parts + animation
+    if (s < mid) return 1;    // medium: extra dressing, no fine wheels/crew
+    return 0;                 // far: base silhouette only
+  }
+  function applyLOD(level) {
+    const midOn = level >= 1, nearOn = level >= 2;
+    for (const t of tanks) {
+      for (const m of t.lodMid) m.visible = midOn;
+      for (const m of t.lodNear) m.visible = nearOn;
+    }
+  }
+  function animateDetails(dt) {
+    const time = _t0;
+    for (const t of tanks) {
+      const a = t.anim; if (!a) continue;
+      if (a.wheels.length) { const spin = t.speed * dt / 0.34; for (const w of a.wheels) w.rotation.x -= spin; }
+      if (!t.alive) continue;
+      const spd = Math.min(Math.abs(t.speed), 14);
+      if (a.antenna && !t.turretGone) {
+        a.antenna.rotation.z = Math.sin(time * 3 + t.wheelPhase) * (0.04 + spd * 0.006);
+        a.antenna.rotation.x = Math.cos(time * 2.3 + t.wheelPhase) * 0.03;
+      }
+      if (a.commander && !t.turretGone) a.commander.position.y = 0.78 + Math.sin(time * 3.5 + t.wheelPhase) * 0.02;
+      if (a.rider) a.rider.rotation.x = -0.04 + Math.sin(time * 6 + t.wheelPhase) * 0.03 * Math.min(1, spd / 8);
+      if (a.exhaust && Math.abs(t.speed) > 3 && Math.random() < 0.2) {
+        const yaw = t.group.rotation.y, cos = Math.cos(yaw), sin = Math.sin(yaw), L = a.exhaust;
+        const wp = new THREE.Vector3(t.group.position.x + (L.x * cos + L.z * sin), L.y, t.group.position.z + (-L.x * sin + L.z * cos));
+        spawnPuff(wp, { color: 0x3a3a38, size: 0.7, rise: 0.9, life: 0.9, grow: 1.4, peak: 0.3, drift: 0.6, spread: 0.2 });
+      }
+    }
+  }
+  function updateLOD(dt) {
+    const want = targetLOD();
+    if (want !== lodLevel) { lodLevel = want; applyLOD(want); }
+    // barrel recoil eases back regardless of zoom (cheap, reads at any distance)
+    for (const t of tanks) if (t.recoil > 0 && t.parts.barrel) { t.recoil = Math.max(0, t.recoil - dt * 4); t.parts.barrel.position.z = t.barrelRestZ - t.recoil * 0.6; }
+    if (lodLevel >= 2) animateDetails(dt);
+  }
 
   // ===========================================================================
   // Input
@@ -1461,7 +1567,7 @@ export function startGame(config) {
     updatePuffs(dt); updateBurners(dt); updateSmokeScreens(dt); updateDust(dt);
     updateMuns(dt); updateAircraft(dt); updateTimers(dt); updateStrikeMarks(dt); updateAiSupport(dt);
     for (const tk of tanks) updateTankBars(tk);
-    updateReloadHud(); updateHUD(); updateCamera(dt);
+    updateReloadHud(); updateHUD(); updateCamera(dt); updateLOD(dt);
     if (bannerTimer > 0 && !gameOver) { bannerTimer -= dt; if (bannerTimer <= 0) elBanner.style.opacity = 0; }
     if (hudFlash > 0) { hudFlash -= dt; app.style.filter = `brightness(${1 + hudFlash * 2})`; } else app.style.filter = "";
     renderer.render(scene, camera);
@@ -1511,6 +1617,14 @@ export function startGame(config) {
       const from = pos.clone().add(new THREE.Vector3(0, 1.35, 0)).addScaledVector(dir, 3.6);
       fireProjectile(from, dir, controlled.team, "ap", controlled.dmg, controlled, ff); },
     killEnemy() { const e = enemyTanks.find((t) => t.alive); if (e) disableTank(e); },
+    // LOD test surface: set the zoom, read the current level, count visible detail
+    setZoom(size) { cam.size = clamp(size, MIN_SIZE, MAX_SIZE); updateLOD(0.016); return cam.size; },
+    get lodLevel() { return lodLevel; }, get camSize() { return cam.size; },
+    detailCount(idx) { const t = tanks[idx]; if (!t) return null;
+      return { mid: t.lodMid.length, midVisible: t.lodMid.filter((m) => m.visible).length,
+        near: t.lodNear.length, nearVisible: t.lodNear.filter((m) => m.visible).length,
+        wheels: t.anim ? t.anim.wheels.length : 0 }; },
+    wheelSpin(idx) { const t = tanks[idx]; return t && t.anim && t.anim.wheels[0] ? t.anim.wheels[0].rotation.x : null; },
   };
   window.__game = handle;
   return handle;

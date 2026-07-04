@@ -75,6 +75,15 @@ The web build has since grown well beyond the MVP with these battlefield systems
   less accurate. Shots also **disperse** — the gun cone widens the faster you're
   driving. The controlled tank flashes the outcome (GLANCE / SOLID HIT / …) on
   each strike.
+- **Zoom-based level of detail** — as you scroll in, vehicles reveal
+  progressively finer models and come alive: at a distance they're clean
+  low-poly silhouettes; zoom to medium and they gain stowage, exhausts,
+  headlights, gun mantlets and coaxial MGs; zoom right in and out come the
+  road wheels, drive sprockets, a commander in the open cupola, and a radio
+  antenna — **animated**: the wheels roll with the tank's speed, the antenna
+  sways, the commander bobs, exhausts puff smoke, and the main gun **recoils**
+  when it fires. Detail is culled when you zoom back out so the wide view stays
+  fast.
 - **Solid tank-vs-tank collisions** — vehicles never overlap, and a ramming
   tank **yields to the one it hits instead of shoving it aside**; separation of
   any residual pile-up is **mass-weighted**, so a Stuart can't bulldoze a Tiger.
