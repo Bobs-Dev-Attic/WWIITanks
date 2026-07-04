@@ -120,9 +120,22 @@ function makeDeployer(team, canvasId, palId, cntId, clrId, autoId, autoN) {
   document.getElementById(autoId).onclick = () => { placed.length = 0; autofill(autoN); refresh(); };
   function autofill(n) { const keys = types.map(([k]) => k); for (let i = 0; i < n; i++) { const key = keys[i % keys.length]; const p = autoPos(key); placed.push({ type: key, x: p.x, z: p.z }); } }
 
+  // restore exact placements from a saved config (unlike fillRoster/addOne,
+  // which re-grid via autoPos and would lose the saved x/z)
+  function setPlaced(arr) {
+    placed.length = 0;
+    const valid = TANK_TYPES[team];
+    for (const p of (arr || [])) {
+      if (placed.length >= CAP) break;
+      if (!p || !valid[p.type]) continue;
+      placed.push({ type: p.type, x: cl(Math.round(p.x)), z: cl(Math.round(p.z)) });
+    }
+    refresh();
+  }
+
   autofill(autoN); refresh();
   selLoc.addEventListener("change", draw);
-  return { placed, addOne, removeOne, count: () => placed.length };
+  return { placed, addOne, removeOne, count: () => placed.length, setPlaced, refresh };
 }
 
 let depsReady = false;
@@ -164,8 +177,17 @@ function makeTerrainEditor() {
     draw();
   });
   document.getElementById("clr-terrain").onclick = () => { props.length = 0; draw(); };
+  function setProps(arr) {
+    props.length = 0;
+    for (const p of (arr || [])) {
+      if (props.length >= 40) break;
+      if (!p || !OBJ_TYPES.some((t) => t[0] === p.type)) continue;
+      props.push({ type: p.type, x: Math.round(cl(p.x)), z: Math.round(cl(p.z)) });
+    }
+    draw();
+  }
   selLoc.addEventListener("change", draw); draw();
-  return { props };
+  return { props, setProps, draw };
 }
 const terrainEd = makeTerrainEditor();
 
@@ -250,6 +272,96 @@ function buildConfig() {
     support: { allies: { arty: supVal(supSel.aArty), air: supVal(supSel.aAir) },
                axis: { arty: supVal(supSel.xArty), air: supVal(supSel.xAir) } } };
 }
+// ---- save / load named setups (localStorage) -------------------------------
+// One versioned key holds a { name: slot } map so listing is trivial. Every
+// access is guarded so private mode / disabled storage / corrupt JSON degrade
+// gracefully instead of throwing.
+const STORE_KEY = "wwiitanks.setups.v1", SCHEMA_V = 1;
+const storageOK = (() => { try { const k = "__wwiit_test__"; localStorage.setItem(k, "1"); localStorage.removeItem(k); return true; } catch (e) { return false; } })();
+function readStore() {
+  if (!storageOK) return {};
+  try { const raw = localStorage.getItem(STORE_KEY); if (!raw) return {}; const o = JSON.parse(raw); return (o && typeof o === "object") ? o : {}; }
+  catch (e) { return {}; }
+}
+function writeStore(map) {
+  if (!storageOK) return false;
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(map)); return true; } catch (e) { return false; }
+}
+function listSetups() { const m = readStore(); return Object.keys(m).sort((a, b) => (m[b].savedAt || 0) - (m[a].savedAt || 0)); }
+function saveSetup(name) {
+  name = (name || "").trim();
+  if (!name) return { ok: false, reason: "empty" };
+  if (!storageOK) return { ok: false, reason: "unavailable" };
+  const map = readStore(), existed = Object.prototype.hasOwnProperty.call(map, name);
+  map[name] = { v: SCHEMA_V, name, savedAt: Date.now(), appVersion: VERSION, config: buildConfig() };
+  if (!writeStore(map)) return { ok: false, reason: "write" };
+  return { ok: true, overwritten: existed };
+}
+function deleteSetup(name) {
+  const map = readStore();
+  if (!Object.prototype.hasOwnProperty.call(map, name)) return { ok: false, reason: "missing" };
+  delete map[name];
+  if (!writeStore(map)) return { ok: false, reason: "write" };
+  return { ok: true };
+}
+function loadSetup(name) { const slot = readStore()[name]; if (!slot || !slot.config) return { ok: false, reason: "missing" }; applyConfig(slot.config); return { ok: true }; }
+// Restore a full setup exactly (mirrors applyBattle, but with exact placements).
+function applyConfig(cfg) {
+  if (!cfg) return false;
+  if (cfg.location && LOCATIONS[cfg.location]) selLoc.value = cfg.location;
+  if (cfg.weather && WEATHER[cfg.weather]) selWx.value = cfg.weather;
+  const sup = cfg.support || {}, clampSup = (n) => Math.max(0, Math.min(5, parseInt(n, 10) || 0));
+  document.getElementById(supSel.aArty).value = clampSup(sup.allies && sup.allies.arty);
+  document.getElementById(supSel.aAir).value = clampSup(sup.allies && sup.allies.air);
+  document.getElementById(supSel.xArty).value = clampSup(sup.axis && sup.axis.arty);
+  document.getElementById(supSel.xAir).value = clampSup(sup.axis && sup.axis.air);
+  alliesDep.setPlaced((cfg.allies && cfg.allies.tanks) || []);
+  axisDep.setPlaced((cfg.axis && cfg.axis.tanks) || []);
+  terrainEd.setProps(cfg.props || []);
+  selBattle.value = "custom"; battleNote = "";
+  selLoc.dispatchEvent(new Event("change")); selWx.dispatchEvent(new Event("change")); describe();
+  updateStartState();
+  return true;
+}
+
+// ---- save / load overlay UI ------------------------------------------------
+function renderSlotList() {
+  const list = document.getElementById("slot-list"); if (!list) return;
+  const names = listSetups();
+  list.innerHTML = "";
+  if (!names.length) { list.innerHTML = '<div class="slot-empty">No saved setups yet.</div>'; return; }
+  const store = readStore();
+  for (const n of names) {
+    const row = document.createElement("div"); row.className = "slot-row";
+    const nm = document.createElement("span"); nm.className = "slot-nm"; nm.textContent = n;
+    const meta = document.createElement("span"); meta.className = "slot-meta";
+    const s = store[n], c = s && s.config;
+    if (c) meta.textContent = `${(c.allies && c.allies.tanks || []).length}v${(c.axis && c.axis.tanks || []).length} · ${c.location || "?"}`;
+    const loadB = document.createElement("button"); loadB.className = "btn"; loadB.textContent = "Load";
+    const delB = document.createElement("button"); delB.className = "btn slot-del"; delB.textContent = "✕";
+    loadB.onclick = () => { loadSetup(n); closeSlots(); };
+    delB.onclick = () => { deleteSetup(n); renderSlotList(); };
+    row.append(nm, meta, loadB, delB); list.appendChild(row);
+  }
+}
+function openSlots(mode) {
+  const ov = document.getElementById("slots"); if (!ov) return;
+  ov.dataset.mode = mode; ov.style.display = "flex";
+  const msg = document.getElementById("slot-msg");
+  if (msg) msg.textContent = storageOK ? "" : "Local storage is unavailable — saving is disabled.";
+  document.getElementById("slot-save-row").style.display = storageOK ? "flex" : "none";
+  renderSlotList();
+  if (mode === "save" && storageOK) { const inp = document.getElementById("slot-name"); inp.value = ""; inp.focus(); }
+}
+function closeSlots() { const ov = document.getElementById("slots"); if (ov) ov.style.display = "none"; }
+function doSave() {
+  const inp = document.getElementById("slot-name"), msg = document.getElementById("slot-msg");
+  const res = saveSetup(inp.value);
+  if (!res.ok) { msg.textContent = res.reason === "empty" ? "Enter a name." : res.reason === "unavailable" ? "Storage unavailable." : "Could not save (storage full?)."; return; }
+  msg.textContent = res.overwritten ? `Overwrote "${inp.value.trim()}".` : `Saved "${inp.value.trim()}".`;
+  renderSlotList();
+}
+
 function show(setupVisible) {
   $("setup").style.display = setupVisible ? "flex" : "none";
   $("hud").style.display = setupVisible ? "none" : "block";
@@ -286,6 +398,14 @@ function syncPause() {
   $("app").style.opacity = p ? 0.6 : 1;
 }
 
+// save / load buttons + overlay
+$("btn-save").onclick = () => openSlots("save");
+$("btn-load").onclick = () => openSlots("load");
+$("slot-confirm").onclick = doSave;
+$("slot-name").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doSave(); } });
+$("slots").addEventListener("click", (e) => { if (e.target.id === "slots" || e.target.closest('[data-act="closeslots"]')) closeSlots(); });
+if (!storageOK) { $("btn-save").disabled = true; $("btn-save").title = "Local storage unavailable"; }
+
 $("start").onclick = startBattle;
 $("menubar").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
@@ -308,4 +428,7 @@ window.__setup = {
   buildConfig, get battleSel() { return selBattle.value; },
   setLocation: (l) => { selLoc.value = l; describe(); }, setWeather: (w) => { selWx.value = w; },
   get handle() { return gameHandle; },
+  // save/load surface
+  saveSetup, loadSetup, deleteSetup, listSetups, applyConfig,
+  get storageOK() { return storageOK; }, openSlots, closeSlots,
 };
