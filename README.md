@@ -75,6 +75,13 @@ The web build has since grown well beyond the MVP with these battlefield systems
   less accurate. Shots also **disperse** — the gun cone widens the faster you're
   driving. The controlled tank flashes the outcome (GLANCE / SOLID HIT / …) on
   each strike.
+- **Realistic turret traverse** — each vehicle turns its turret at a
+  historically-flavoured powered rate rather than snapping instantly: light
+  tanks are quick (Stuart ~40°/s, Panzer II ~36°/s), mediums moderate (Sherman
+  ~24°/s, Panzer IV ~20°/s), and heavies deliberately slow (Pershing ~18°/s,
+  Tiger ~15°/s) — so flanking a heavy and staying off its gun line genuinely
+  pays off. Hand-swung MG mounts on soft vehicles slew much faster. The same
+  rate governs the player, the AI, and MG vehicles alike.
 - **Zoom-based level of detail** — as you scroll in, vehicles reveal
   progressively finer models and come alive: at a distance they're clean
   low-poly silhouettes; zoom to medium and they gain stowage, exhausts,
