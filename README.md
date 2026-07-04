@@ -81,6 +81,9 @@ The web build has since grown well beyond the MVP with these battlefield systems
   as a named slot in the browser, so it survives reloads and return visits. Load
   restores everything exactly; you can keep multiple named setups and delete the
   ones you don't want.
+- **Realistic hull speeds** — tanks move at believable battlefield paces
+  (lights nimble, heavies ponderous) and pull up to speed gradually rather than
+  hitting top speed instantly, so engagements develop and maneuvering matters.
 - **Realistic turret traverse** — each vehicle turns its turret at a
   historically-flavoured powered rate rather than snapping instantly: light
   tanks are quick (Stuart ~40°/s, Panzer II ~36°/s), mediums moderate (Sherman

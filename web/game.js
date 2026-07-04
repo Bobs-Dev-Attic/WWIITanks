@@ -13,7 +13,7 @@
 
 import * as THREE from "three";
 
-export const VERSION = "0.14.0";
+export const VERSION = "0.14.1";
 
 // Half-extent of the playable battlefield (world units). Shared with the setup
 // minimaps so deployment coordinates line up with the in-game bounds.
@@ -43,20 +43,20 @@ export const WEATHER = {
 // cls "tank" = turreted armour; "apc"/"jeep"/"moto" = soft MG-armed vehicles
 export const TANK_TYPES = {
   allies: {
-    stuart:    { name: "M5 Stuart (Light)",    health: 70,  reload: 0.8, maxFwd: 15, big: false, color: 0x4a5834, dmg: 30, cls: "tank", turret: 40 },
-    sherman:   { name: "M4 Sherman (Medium)",  health: 115, reload: 1.1, maxFwd: 12, big: false, color: 0x556b2f, dmg: 42, cls: "tank", turret: 24 },
-    pershing:  { name: "M26 Pershing (Heavy)", health: 175, reload: 1.7, maxFwd: 9,  big: true,  color: 0x4d5a3a, dmg: 56, cls: "tank", turret: 18 },
-    halftrack: { name: "M3 Half-track (APC)",  health: 60,  maxFwd: 16, color: 0x4a5834, cls: "apc",  crew: 6 },
-    jeep:      { name: "Willys Jeep (.50 cal)",health: 26,  maxFwd: 22, color: 0x4a5834, cls: "jeep", crew: 2 },
-    moto:      { name: "Motorcycle",           health: 15,  maxFwd: 26, color: 0x37372e, cls: "moto", crew: 1 },
+    stuart:    { name: "M5 Stuart (Light)",    health: 70,  reload: 0.8, maxFwd: 9,   big: false, color: 0x4a5834, dmg: 30, cls: "tank", turret: 40 },
+    sherman:   { name: "M4 Sherman (Medium)",  health: 115, reload: 1.1, maxFwd: 7,   big: false, color: 0x556b2f, dmg: 42, cls: "tank", turret: 24 },
+    pershing:  { name: "M26 Pershing (Heavy)", health: 175, reload: 1.7, maxFwd: 5.5, big: true,  color: 0x4d5a3a, dmg: 56, cls: "tank", turret: 18 },
+    halftrack: { name: "M3 Half-track (APC)",  health: 60,  maxFwd: 10, color: 0x4a5834, cls: "apc",  crew: 6 },
+    jeep:      { name: "Willys Jeep (.50 cal)",health: 26,  maxFwd: 14, color: 0x4a5834, cls: "jeep", crew: 2 },
+    moto:      { name: "Motorcycle",           health: 15,  maxFwd: 16, color: 0x37372e, cls: "moto", crew: 1 },
   },
   germans: {
-    panzer2:   { name: "Panzer II (Light)",    health: 65,  reload: 0.85,maxFwd: 15, big: false, color: 0x6a6e72, dmg: 28, cls: "tank", turret: 36 },
-    panzer4:   { name: "Panzer IV (Medium)",   health: 120, reload: 1.2, maxFwd: 11, big: true,  color: 0x606468, dmg: 44, cls: "tank", turret: 20 },
-    tiger:     { name: "Tiger I (Heavy)",      health: 205, reload: 1.9, maxFwd: 8,  big: true,  color: 0x585c60, dmg: 62, cls: "tank", turret: 15 },
-    halftrack: { name: "Sd.Kfz. 251 (APC)",    health: 58,  maxFwd: 16, color: 0x5a5c60, cls: "apc",  crew: 6 },
-    kubelwagen:{ name: "Kübelwagen (MG)",      health: 24,  maxFwd: 22, color: 0x5a5c60, cls: "jeep", crew: 2 },
-    moto:      { name: "Motorcycle + Sidecar", health: 16,  maxFwd: 26, color: 0x45453d, cls: "moto", crew: 2 },
+    panzer2:   { name: "Panzer II (Light)",    health: 65,  reload: 0.85,maxFwd: 9,   big: false, color: 0x6a6e72, dmg: 28, cls: "tank", turret: 36 },
+    panzer4:   { name: "Panzer IV (Medium)",   health: 120, reload: 1.2, maxFwd: 6.5, big: true,  color: 0x606468, dmg: 44, cls: "tank", turret: 20 },
+    tiger:     { name: "Tiger I (Heavy)",      health: 205, reload: 1.9, maxFwd: 5,   big: true,  color: 0x585c60, dmg: 62, cls: "tank", turret: 15 },
+    halftrack: { name: "Sd.Kfz. 251 (APC)",    health: 58,  maxFwd: 10, color: 0x5a5c60, cls: "apc",  crew: 6 },
+    kubelwagen:{ name: "Kübelwagen (MG)",      health: 24,  maxFwd: 14, color: 0x5a5c60, cls: "jeep", crew: 2 },
+    moto:      { name: "Motorcycle + Sidecar", health: 16,  maxFwd: 16, color: 0x45453d, cls: "moto", crew: 2 },
   },
 };
 
@@ -680,16 +680,16 @@ export function startGame(config) {
     // role/doctrine: fast lights scout & flank, heavies support by fire, mediums
     // form the line; soft vehicles raid (jeep/moto) or carry troops (apc).
     const role = !isTank ? (cls === "apc" ? "apc" : "raider")
-      : (spec.maxFwd >= 14 ? "scout" : (spec.health >= 170 ? "support" : "line"));
+      : (spec.maxFwd >= 8 ? "scout" : (spec.health >= 170 ? "support" : "line"));
     const radius = isTank ? 1.8 : (cls === "apc" ? 1.5 : cls === "jeep" ? 1.1 : 0.9);
     const t = { team, typeKey, name: spec.name, group: built.group, turret: built.turret, parts: built.parts,
       yaw: yaw || 0, turretYaw: 0, speed: 0, health: spec.health, maxHealth: spec.health, radius,
       cooldown: 0, reload: spec.reload || 1, maxFwd: spec.maxFwd, dmg: spec.dmg || 0, big: !!spec.big, mgCd: 0, smokeCd: 0,
       // turret traverse in deg/s — historical powered rates for tanks; a pintle
       // MG a gunner hand-swings is much faster.
-      turretSpeed: spec.turret || (isTank ? (spec.big ? 16 : (spec.maxFwd >= 14 ? 38 : 24)) : 100),
+      turretSpeed: spec.turret || (isTank ? (spec.big ? 16 : (spec.maxFwd >= 8 ? 38 : 24)) : 100),
       cls, armored: isTank, mainGun: isTank, mgOnly: !isTank,
-      mass: isTank ? (spec.big ? 2.6 : (spec.maxFwd >= 14 ? 1.2 : 1.7)) : (cls === "apc" ? 1.2 : cls === "jeep" ? 0.5 : 0.35),
+      mass: isTank ? (spec.big ? 2.6 : (spec.maxFwd >= 8 ? 1.2 : 1.7)) : (cls === "apc" ? 1.2 : cls === "jeep" ? 0.5 : 0.35),
       role, bound: tanks.length % 2, smoked: false,
       leftTrackBroken: false, rightTrackBroken: false, turretGone: false, alive: true, disabled: false,
       crewCount: spec.crew != null ? spec.crew : (spec.big ? 4 : 3), hasGrenades: Math.random() < 0.6, bars, hpFill, rlFill, rlBg,
@@ -1264,11 +1264,12 @@ export function startGame(config) {
   // Movement / AI
   // ===========================================================================
   function driveTank(t, throttle, steer, dt) {
-    let maxFwd = t.maxFwd, maxRev = 5;
+    let maxFwd = t.maxFwd, maxRev = 3;
     if (t.leftTrackBroken && t.rightTrackBroken) { t.speed *= Math.pow(0.02, dt); throttle = 0; steer = 0; }
     else if (t.leftTrackBroken || t.rightTrackBroken) { maxFwd *= 0.5; maxRev *= 0.5; t.yaw += (t.leftTrackBroken ? 1 : -1) * deg(35) * (Math.abs(t.speed) / maxFwd + 0.2) * dt; }
-    if (throttle > 0) t.speed += 14 * dt; else if (throttle < 0) t.speed -= 20 * dt;
-    else t.speed -= Math.sign(t.speed) * Math.min(Math.abs(t.speed), 7 * dt);
+    // engines pull heavy hulls up to speed gradually — no instant top speed
+    if (throttle > 0) t.speed += 4.5 * dt; else if (throttle < 0) t.speed -= 6 * dt;
+    else t.speed -= Math.sign(t.speed) * Math.min(Math.abs(t.speed), 4 * dt);
     t.speed = clamp(t.speed, -maxRev, maxFwd);
     if (steer && !(t.leftTrackBroken && t.rightTrackBroken)) { const grip = 0.4 + 0.6 * Math.min(1, Math.abs(t.speed) / maxFwd); t.yaw -= steer * deg(72) * grip * dt; }
     t.group.rotation.y = t.yaw;
