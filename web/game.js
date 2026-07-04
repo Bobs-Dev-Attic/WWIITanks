@@ -13,7 +13,7 @@
 
 import * as THREE from "three";
 
-export const VERSION = "0.13.0";
+export const VERSION = "0.13.1";
 
 // Half-extent of the playable battlefield (world units). Shared with the setup
 // minimaps so deployment coordinates line up with the in-game bounds.
@@ -43,17 +43,17 @@ export const WEATHER = {
 // cls "tank" = turreted armour; "apc"/"jeep"/"moto" = soft MG-armed vehicles
 export const TANK_TYPES = {
   allies: {
-    stuart:    { name: "M5 Stuart (Light)",    health: 70,  reload: 0.8, maxFwd: 15, big: false, color: 0x4a5834, dmg: 30, cls: "tank" },
-    sherman:   { name: "M4 Sherman (Medium)",  health: 115, reload: 1.1, maxFwd: 12, big: false, color: 0x556b2f, dmg: 42, cls: "tank" },
-    pershing:  { name: "M26 Pershing (Heavy)", health: 175, reload: 1.7, maxFwd: 9,  big: true,  color: 0x4d5a3a, dmg: 56, cls: "tank" },
+    stuart:    { name: "M5 Stuart (Light)",    health: 70,  reload: 0.8, maxFwd: 15, big: false, color: 0x4a5834, dmg: 30, cls: "tank", turret: 40 },
+    sherman:   { name: "M4 Sherman (Medium)",  health: 115, reload: 1.1, maxFwd: 12, big: false, color: 0x556b2f, dmg: 42, cls: "tank", turret: 24 },
+    pershing:  { name: "M26 Pershing (Heavy)", health: 175, reload: 1.7, maxFwd: 9,  big: true,  color: 0x4d5a3a, dmg: 56, cls: "tank", turret: 18 },
     halftrack: { name: "M3 Half-track (APC)",  health: 60,  maxFwd: 16, color: 0x4a5834, cls: "apc",  crew: 6 },
     jeep:      { name: "Willys Jeep (.50 cal)",health: 26,  maxFwd: 22, color: 0x4a5834, cls: "jeep", crew: 2 },
     moto:      { name: "Motorcycle",           health: 15,  maxFwd: 26, color: 0x37372e, cls: "moto", crew: 1 },
   },
   germans: {
-    panzer2:   { name: "Panzer II (Light)",    health: 65,  reload: 0.85,maxFwd: 15, big: false, color: 0x6a6e72, dmg: 28, cls: "tank" },
-    panzer4:   { name: "Panzer IV (Medium)",   health: 120, reload: 1.2, maxFwd: 11, big: true,  color: 0x606468, dmg: 44, cls: "tank" },
-    tiger:     { name: "Tiger I (Heavy)",      health: 205, reload: 1.9, maxFwd: 8,  big: true,  color: 0x585c60, dmg: 62, cls: "tank" },
+    panzer2:   { name: "Panzer II (Light)",    health: 65,  reload: 0.85,maxFwd: 15, big: false, color: 0x6a6e72, dmg: 28, cls: "tank", turret: 36 },
+    panzer4:   { name: "Panzer IV (Medium)",   health: 120, reload: 1.2, maxFwd: 11, big: true,  color: 0x606468, dmg: 44, cls: "tank", turret: 20 },
+    tiger:     { name: "Tiger I (Heavy)",      health: 205, reload: 1.9, maxFwd: 8,  big: true,  color: 0x585c60, dmg: 62, cls: "tank", turret: 15 },
     halftrack: { name: "Sd.Kfz. 251 (APC)",    health: 58,  maxFwd: 16, color: 0x5a5c60, cls: "apc",  crew: 6 },
     kubelwagen:{ name: "Kübelwagen (MG)",      health: 24,  maxFwd: 22, color: 0x5a5c60, cls: "jeep", crew: 2 },
     moto:      { name: "Motorcycle + Sidecar", health: 16,  maxFwd: 26, color: 0x45453d, cls: "moto", crew: 2 },
@@ -685,6 +685,9 @@ export function startGame(config) {
     const t = { team, typeKey, name: spec.name, group: built.group, turret: built.turret, parts: built.parts,
       yaw: yaw || 0, turretYaw: 0, speed: 0, health: spec.health, maxHealth: spec.health, radius,
       cooldown: 0, reload: spec.reload || 1, maxFwd: spec.maxFwd, dmg: spec.dmg || 0, big: !!spec.big, mgCd: 0, smokeCd: 0,
+      // turret traverse in deg/s — historical powered rates for tanks; a pintle
+      // MG a gunner hand-swings is much faster.
+      turretSpeed: spec.turret || (isTank ? (spec.big ? 16 : (spec.maxFwd >= 14 ? 38 : 24)) : 100),
       cls, armored: isTank, mainGun: isTank, mgOnly: !isTank,
       mass: isTank ? (spec.big ? 2.6 : (spec.maxFwd >= 14 ? 1.2 : 1.7)) : (cls === "apc" ? 1.2 : cls === "jeep" ? 0.5 : 0.35),
       role, bound: tanks.length % 2, smoked: false,
@@ -1253,7 +1256,8 @@ export function startGame(config) {
       cam.pan.addScaledVector(right, -e.movementX * k).addScaledVector(fwd, -e.movementY * k); }
   }, { signal: sig });
   canvas.addEventListener("wheel", (e) => { e.preventDefault(); cam.size = clamp(cam.size * (e.deltaY > 0 ? 1.1 : 1 / 1.1), MIN_SIZE, MAX_SIZE); }, { passive: false, signal: sig });
-  function updateAim() { raycaster.setFromCamera(mouseNDC, camera); const hit = new THREE.Vector3(); if (raycaster.ray.intersectPlane(groundPlane, hit)) aimPoint.copy(hit); }
+  let aimLock = null; // test-only: pin the aim point so traverse can be measured
+  function updateAim() { if (aimLock) { aimPoint.copy(aimLock); return; } raycaster.setFromCamera(mouseNDC, camera); const hit = new THREE.Vector3(); if (raycaster.ray.intersectPlane(groundPlane, hit)) aimPoint.copy(hit); }
   function tryFire() { if (controlled && controlled.alive && !gameOver) fireTank(controlled); }
 
   // ===========================================================================
@@ -1340,7 +1344,7 @@ export function startGame(config) {
     driveTank(t, throttle, steer, dt);
     if (!t.turretGone) {
       const dx = aimPoint.x - t.group.position.x, dz = aimPoint.z - t.group.position.z;
-      if (dx * dx + dz * dz > 0.5) { const worldYaw = Math.atan2(dx, dz), rel = worldYaw - t.yaw, step = shortAngle(t.turretYaw, rel), max = deg(240) * dt;
+      if (dx * dx + dz * dz > 0.5) { const worldYaw = Math.atan2(dx, dz), rel = worldYaw - t.yaw, step = shortAngle(t.turretYaw, rel), max = deg(t.turretSpeed) * dt;
         t.turretYaw += clamp(step, -max, max); t.turret.rotation.y = t.turretYaw; }
       if (keys["f"]) fireMG(t, aimPoint.clone().setY(1), true); // hold F: player MG (hits anything)
     }
@@ -1437,7 +1441,7 @@ export function startGame(config) {
     driveTank(t, throttle, clamp(-step * 2.2, -1, 1), dt);
     // swing the pintle MG onto the target and fire
     const rel = aimYaw - t.yaw, s = shortAngle(t.turretYaw, rel);
-    t.turretYaw += clamp(s, -deg(220) * dt, deg(220) * dt); t.turret.rotation.y = t.turretYaw;
+    const mgMax = deg(t.turretSpeed) * dt; t.turretYaw += clamp(s, -mgMax, mgMax); t.turret.rotation.y = t.turretYaw;
     if (t.mgCd <= 0 && dist < 44 && !smokeBlocks(pos, tp) && !terrainBlocks(pos, tp)) fireMG(t, tp.clone().setY(1), false);
   }
 
@@ -1497,7 +1501,7 @@ export function startGame(config) {
 
     if (!t.turretGone) {
       const rel = aimYaw - t.yaw, s = shortAngle(t.turretYaw, rel);
-      t.turretYaw += clamp(s, -deg(140) * dt, deg(140) * dt); t.turret.rotation.y = t.turretYaw;
+      const tMax = deg(t.turretSpeed) * dt; t.turretYaw += clamp(s, -tMax, tMax); t.turret.rotation.y = t.turretYaw;
       const aligned = Math.abs(shortAngle(t.yaw + t.turretYaw, aimYaw)) < deg(7);
       const clearLOS = !smokeBlocks(pos, tp) && !terrainBlocks(pos, tp);
       if (enemyTank && t.cooldown <= 0 && dist < fireRange && aligned && clearLOS) fireTank(t);
@@ -1625,6 +1629,10 @@ export function startGame(config) {
         near: t.lodNear.length, nearVisible: t.lodNear.filter((m) => m.visible).length,
         wheels: t.anim ? t.anim.wheels.length : 0 }; },
     wheelSpin(idx) { const t = tanks[idx]; return t && t.anim && t.anim.wheels[0] ? t.anim.wheels[0].rotation.x : null; },
+    // turret-traverse test surface
+    lockAim(x, z) { aimLock = new THREE.Vector3(x, 0, z); },
+    get turretDeg() { return controlled ? controlled.turretYaw * 180 / Math.PI : null; },
+    turretSpeedOf(idx) { const t = tanks[idx]; return t ? t.turretSpeed : null; },
   };
   window.__game = handle;
   return handle;
