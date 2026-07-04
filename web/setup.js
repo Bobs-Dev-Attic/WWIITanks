@@ -80,7 +80,7 @@ function makeDeployer(team, canvasId, palId, cntId, clrId, autoId, autoN) {
   });
   function select(key) { selType = key; for (const k in rowEls) rowEls[k].row.classList.toggle("sel", k === key); }
   const countOf = (key) => placed.filter((p) => p.type === key).length;
-  function refresh() { for (const k in rowEls) rowEls[k].cnt.textContent = countOf(k); document.getElementById(cntId).textContent = placed.length; draw(); }
+  function refresh() { for (const k in rowEls) rowEls[k].cnt.textContent = countOf(k); document.getElementById(cntId).textContent = placed.length; draw(); updateStartState(); }
 
   function autoPos(key) {
     const c = countOf(key), col = c % 6, rowi = Math.floor(c / 6);
@@ -125,8 +125,10 @@ function makeDeployer(team, canvasId, palId, cntId, clrId, autoId, autoN) {
   return { placed, addOne, removeOne, count: () => placed.length };
 }
 
+let depsReady = false;
 const alliesDep = makeDeployer("allies", "map-allies", "pal-allies", "cnt-allies", "clr-allies", "auto-allies", 4);
 const axisDep = makeDeployer("germans", "map-axis", "pal-axis", "cnt-axis", "clr-axis", "auto-axis", 5);
+depsReady = true; updateStartState();
 
 // ---- terrain editor: add structures/objects anywhere on the field ----------
 const OBJ_TYPES = [
@@ -254,7 +256,17 @@ function show(setupVisible) {
   $("menubar").style.display = setupVisible ? "none" : "flex";
   if (setupVisible) $("help").style.display = "none";
 }
+// Both sides need at least one unit before a battle can begin.
+function battleReady() { return depsReady && alliesDep.count() >= 1 && axisDep.count() >= 1; }
+function updateStartState() {
+  if (!depsReady) return; // deployers still constructing (refresh runs during their setup)
+  const btn = document.getElementById("start"); if (!btn) return; // ($ helper is defined later in the module)
+  const ok = battleReady();
+  btn.disabled = !ok;
+  btn.title = ok ? "" : "Deploy at least one Allied and one Axis unit to start";
+}
 function startBattle() {
+  if (!battleReady()) return; // guard: can't start an empty battle
   lastConfig = buildConfig();
   show(false);
   gameHandle = startGame(lastConfig);

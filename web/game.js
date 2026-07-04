@@ -13,7 +13,7 @@
 
 import * as THREE from "three";
 
-export const VERSION = "0.12.0";
+export const VERSION = "0.12.1";
 
 // Half-extent of the playable battlefield (world units). Shared with the setup
 // minimaps so deployment coordinates line up with the in-game bounds.
